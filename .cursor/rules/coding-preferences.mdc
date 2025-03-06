@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Coding Workflow Preferences
+
+- Focus on the areas of code  relevant to the task
+- Do not touch code that is unrelated to the task
+- Always think about what other methods and areas of code might be affected by code changes

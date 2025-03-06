@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hardcore 2D Action RPG</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Game canvas will be inserted here -->
+    <div id="loading-screen">
+      <h1>Hardcore 2D Action RPG</h1>
+      <div class="loading-bar">
+        <div class="loading-progress"></div>
+      </div>
+      <p class="loading-text">Loading...</p>
+    </div>
+    
+    <!-- Character selection screen -->
+    <div id="character-select" class="hidden">
+      <h1>Choose Your Character</h1>
+      <div class="character-options">
+        <div class="character-option" data-class="warrior">
+          <h2>Warrior</h2>
+          <div class="character-preview warrior"></div>
+          <p>High strength and durability. Specializes in melee combat.</p>
+          <ul>
+            <li>Primary Stat: Strength</li>
+            <li>Skill: Cleave (multi-target melee)</li>
+          </ul>
+        </div>
+        <div class="character-option" data-class="mage">
+          <h2>Mage</h2>
+          <div class="character-preview mage"></div>
+          <p>High intelligence and spell power. Specializes in ranged magic.</p>
+          <ul>
+            <li>Primary Stat: Intelligence</li>
+            <li>Skill: Fireball (ranged AOE)</li>
+          </ul>
+        </div>
+        <div class="character-option" data-class="ranger">
+          <h2>Ranger</h2>
+          <div class="character-preview ranger"></div>
+          <p>High dexterity and precision. Specializes in ranged attacks.</p>
+          <ul>
+            <li>Primary Stat: Dexterity</li>
+            <li>Skill: Multi-Shot (multiple arrows)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="name-input">
+        <label for="player-name">Character Name:</label>
+        <input type="text" id="player-name" maxlength="16" placeholder="Enter name...">
+      </div>
+      <div class="debug-option">
+        <input type="checkbox" id="debug-mode" name="debug-mode">
+        <label for="debug-mode">Enable Debug Mode</label>
+      </div>
+      <button id="start-game">Enter the World</button>
+    </div>
+    
+    <!-- Game UI overlays -->
+    <div id="game-ui" class="hidden">
+      <div class="player-stats">
+        <div class="health-bar">
+          <div class="health-fill"></div>
+          <span class="health-text">100/100</span>
+        </div>
+        <div class="xp-bar">
+          <div class="xp-fill"></div>
+          <span class="xp-text">Level 1</span>
+        </div>
+      </div>
+      
+      <div class="skill-bar">
+        <div class="skill" data-skill="1">
+          <div class="skill-icon skill-1"></div>
+          <div class="cooldown-overlay"></div>
+          <span class="key-binding">1</span>
+        </div>
+        <div class="skill" data-skill="2">
+          <div class="skill-icon skill-2"></div>
+          <div class="cooldown-overlay"></div>
+          <span class="key-binding">2</span>
+        </div>
+        <div class="skill" data-skill="3">
+          <div class="skill-icon skill-3"></div>
+          <div class="cooldown-overlay"></div>
+          <span class="key-binding">3</span>
+        </div>
+        <div class="skill" data-skill="4">
+          <div class="skill-icon skill-4"></div>
+          <div class="cooldown-overlay"></div>
+          <span class="key-binding">4</span>
+        </div>
+      </div>
+      
+      <div class="minimap">
+        <!-- Minimap will be rendered here -->
+      </div>
+    </div>
+    
+    <!-- Inventory panel -->
+    <div id="inventory-panel" class="hidden">
+      <h2>Inventory</h2>
+      <div class="equipment">
+        <div class="equipment-slot" data-slot="weapon">
+          <div class="slot-label">Weapon</div>
+        </div>
+        <div class="equipment-slot" data-slot="head">
+          <div class="slot-label">Head</div>
+        </div>
+        <div class="equipment-slot" data-slot="body">
+          <div class="slot-label">Body</div>
+        </div>
+        <div class="equipment-slot" data-slot="legs">
+          <div class="slot-label">Legs</div>
+        </div>
+        <div class="equipment-slot" data-slot="feet">
+          <div class="slot-label">Feet</div>
+        </div>
+        <div class="equipment-slot" data-slot="hands">
+          <div class="slot-label">Hands</div>
+        </div>
+        <div class="equipment-slot" data-slot="ring1">
+          <div class="slot-label">Ring</div>
+        </div>
+        <div class="equipment-slot" data-slot="ring2">
+          <div class="slot-label">Ring</div>
+        </div>
+        <div class="equipment-slot" data-slot="amulet">
+          <div class="slot-label">Amulet</div>
+        </div>
+      </div>
+      <div class="inventory-grid">
+        <!-- Inventory slots will be generated here -->
+      </div>
+      <div class="item-tooltip hidden">
+        <!-- Item tooltip will be shown here -->
+      </div>
+    </div>
+    
+    <!-- Death screen -->
+    <div id="death-screen" class="hidden">
+      <h1>You Died</h1>
+      <p>Your items have been dropped where you fell.</p>
+      <button id="respawn-button">Respawn</button>
+    </div>
+  </div>
+  
+  <!-- Scripts -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/entities/player.js"></script>
+  <script src="js/entities/monster.js"></script>
+  <script src="js/entities/item.js"></script>
+  <script src="js/world/world.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html> 

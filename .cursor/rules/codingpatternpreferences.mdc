@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Coding Pattern Preferences
+
+- Always prefer simple solutions
+- Avoid duplication of code wherever possible, which means checking other areas of the codebase that might have similar code or functionality
+- Write code that takes into account different environments: dev, test, and prod
+- You are careful to only make changes that are requested or you are confident are well understood and related to the change being requested
+- Keep the codebase very clean and organized
+- Avoid having files over 200-300 lines of code
+- Avoid writing scripts to files that are only used once
+- Mocking data is only needed for tests
+- Never overwrite my .env without asking first

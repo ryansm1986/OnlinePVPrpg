@@ -1,0 +1,580 @@
+/**
+ * UI class
+ * Handles user interface elements
+ */
+class UI {
+  /**
+   * Create a new UI instance
+   * @param {Game} game - Reference to the game
+   */
+  constructor(game) {
+    this.game = game;
+    
+    // UI elements
+    this.healthBar = null;
+    this.healthText = null;
+    this.xpBar = null;
+    this.xpText = null;
+    this.skillCooldowns = {};
+    this.inventorySlots = [];
+    this.equipmentSlots = {};
+    this.notificationContainer = null;
+    
+    // Bind methods
+    this.updatePlayerStats = this.updatePlayerStats.bind(this);
+    this.updateInventory = this.updateInventory.bind(this);
+    this.showNotification = this.showNotification.bind(this);
+  }
+  
+  /**
+   * Initialize UI
+   */
+  init() {
+    // Get UI elements
+    this.healthBar = document.querySelector('.health-fill');
+    this.healthText = document.querySelector('.health-text');
+    this.xpBar = document.querySelector('.xp-fill');
+    this.xpText = document.querySelector('.xp-text');
+    
+    // Get skill cooldown elements
+    const skillElements = document.querySelectorAll('.skill');
+    skillElements.forEach(element => {
+      const skillId = parseInt(element.getAttribute('data-skill'));
+      this.skillCooldowns[skillId] = element.querySelector('.cooldown-overlay');
+    });
+    
+    // Create notification container
+    this.notificationContainer = document.createElement('div');
+    this.notificationContainer.className = 'notification-container';
+    this.notificationContainer.style.position = 'absolute';
+    this.notificationContainer.style.top = '20px';
+    this.notificationContainer.style.right = '20px';
+    this.notificationContainer.style.width = '300px';
+    this.notificationContainer.style.zIndex = '100';
+    document.getElementById('game-container').appendChild(this.notificationContainer);
+    
+    // Set up inventory
+    this.setupInventory();
+    
+    // Set up equipment slots
+    this.setupEquipmentSlots();
+  }
+  
+  /**
+   * Set up inventory grid
+   */
+  setupInventory() {
+    const inventoryGrid = document.querySelector('.inventory-grid');
+    
+    // Create inventory slots
+    for (let i = 0; i < 20; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'inventory-slot';
+      slot.setAttribute('data-slot', i);
+      
+      // Add click event
+      slot.addEventListener('click', (event) => {
+        this.handleInventorySlotClick(event, i);
+      });
+      
+      inventoryGrid.appendChild(slot);
+      this.inventorySlots.push(slot);
+    }
+  }
+  
+  /**
+   * Set up equipment slots
+   */
+  setupEquipmentSlots() {
+    const equipmentSlots = document.querySelectorAll('.equipment-slot');
+    
+    equipmentSlots.forEach(slot => {
+      const slotName = slot.getAttribute('data-slot');
+      this.equipmentSlots[slotName] = slot;
+      
+      // Add click event
+      slot.addEventListener('click', (event) => {
+        this.handleEquipmentSlotClick(event, slotName);
+      });
+    });
+  }
+  
+  /**
+   * Update player stats display
+   * @param {Player} [player] - The player (if not provided, will use game.player)
+   */
+  updatePlayerStats(player) {
+    // Use provided player or get from game
+    player = player || this.game.player;
+    
+    // Check if player exists
+    if (!player) {
+      console.warn('Cannot update player stats: Player is undefined');
+      return;
+    }
+    
+    // Update health bar
+    const healthPercent = (player.health / player.maxHealth) * 100;
+    this.healthBar.style.width = `${healthPercent}%`;
+    this.healthText.textContent = `${Math.ceil(player.health)}/${player.maxHealth}`;
+    
+    // Update XP bar
+    const xpPercent = (player.experience / player.experienceToNextLevel) * 100;
+    this.xpBar.style.width = `${xpPercent}%`;
+    this.xpText.textContent = `Level ${player.level}`;
+    
+    // Update skill cooldowns
+    for (const [skillId, cooldown] of Object.entries(player.skillCooldowns)) {
+      const cooldownOverlay = this.skillCooldowns[skillId];
+      
+      if (cooldownOverlay) {
+        if (cooldown > 0) {
+          // Calculate cooldown percentage
+          const maxCooldown = CONFIG.SKILL_COOLDOWNS[player.characterClass][skillId];
+          const cooldownPercent = (cooldown / maxCooldown) * 100;
+          
+          // Update cooldown overlay
+          cooldownOverlay.style.height = `${cooldownPercent}%`;
+        } else {
+          // Reset cooldown overlay
+          cooldownOverlay.style.height = '0%';
+        }
+      }
+    }
+  }
+  
+  /**
+   * Update inventory display
+   */
+  updateInventory() {
+    // Skip if no player
+    if (!this.game.player) {
+      return;
+    }
+    
+    // Clear all slots
+    this.inventorySlots.forEach(slot => {
+      slot.innerHTML = '';
+    });
+    
+    // Clear all equipment slots
+    for (const slot in this.equipmentSlots) {
+      this.equipmentSlots[slot].innerHTML = '';
+      this.equipmentSlots[slot].appendChild(document.createElement('div')).className = 'slot-label';
+      this.equipmentSlots[slot].querySelector('.slot-label').textContent = slot.charAt(0).toUpperCase() + slot.slice(1);
+    }
+    
+    // Add items to inventory slots
+    this.game.player.inventory.forEach((item, index) => {
+      if (index < this.inventorySlots.length) {
+        const slot = this.inventorySlots[index];
+        this.createItemElement(item, slot);
+      }
+    });
+    
+    // Add items to equipment slots
+    for (const [slot, item] of Object.entries(this.game.player.equipment)) {
+      if (item && this.equipmentSlots[slot]) {
+        this.createItemElement(item, this.equipmentSlots[slot]);
+      }
+    }
+  }
+  
+  /**
+   * Create an item element
+   * @param {Object} item - The item
+   * @param {HTMLElement} container - The container element
+   */
+  createItemElement(item, container) {
+    // Create item element
+    const itemElement = document.createElement('div');
+    itemElement.className = 'item';
+    itemElement.setAttribute('data-item-id', item.id);
+    
+    // Set background color based on rarity
+    let backgroundColor;
+    switch (item.rarity) {
+      case 'rare':
+        backgroundColor = '#4169E1'; // Royal blue
+        break;
+      case 'legendary':
+        backgroundColor = '#FFD700'; // Gold
+        break;
+      default:
+        backgroundColor = '#FFFFFF'; // White
+    }
+    
+    // Set item style
+    itemElement.style.backgroundColor = backgroundColor;
+    
+    // Add item to container
+    container.appendChild(itemElement);
+    
+    // Add hover event for tooltip
+    itemElement.addEventListener('mouseover', (event) => {
+      this.showItemTooltip(item, event.clientX, event.clientY);
+    });
+    
+    itemElement.addEventListener('mouseout', () => {
+      this.hideItemTooltip();
+    });
+  }
+  
+  /**
+   * Show item tooltip
+   * @param {Object} item - The item
+   * @param {number} x - X position
+   * @param {number} y - Y position
+   */
+  showItemTooltip(item, x, y) {
+    const tooltip = document.querySelector('.item-tooltip');
+    
+    // Set tooltip content
+    tooltip.innerHTML = `
+      <div class="item-name" style="color: ${item.color || '#FFFFFF'}">${item.name}</div>
+      <div class="item-type">${item.type}</div>
+      <div class="item-stats">
+        ${this.formatItemStats(item.stats)}
+      </div>
+    `;
+    
+    // Position tooltip
+    tooltip.style.left = `${x + 10}px`;
+    tooltip.style.top = `${y + 10}px`;
+    
+    // Show tooltip
+    tooltip.classList.remove('hidden');
+  }
+  
+  /**
+   * Hide item tooltip
+   */
+  hideItemTooltip() {
+    const tooltip = document.querySelector('.item-tooltip');
+    tooltip.classList.add('hidden');
+  }
+  
+  /**
+   * Format item stats for display
+   * @param {Object} stats - Item stats
+   * @returns {string} Formatted stats HTML
+   */
+  formatItemStats(stats) {
+    if (!stats) return '';
+    
+    let html = '';
+    
+    // Add damage stat
+    if (stats.damage) {
+      html += `<div class="item-stat">Damage: ${stats.damage}</div>`;
+    }
+    
+    // Add defense stat
+    if (stats.defense) {
+      html += `<div class="item-stat">Defense: ${stats.defense}</div>`;
+    }
+    
+    // Add other stats
+    const statNames = {
+      strength: 'Strength',
+      intelligence: 'Intelligence',
+      dexterity: 'Dexterity',
+      vitality: 'Vitality',
+      health: 'Health',
+      speed: 'Speed'
+    };
+    
+    for (const [stat, value] of Object.entries(stats)) {
+      if (stat !== 'damage' && stat !== 'defense' && statNames[stat]) {
+        html += `<div class="item-stat">${statNames[stat]}: +${value}</div>`;
+      }
+    }
+    
+    // Add potion effect
+    if (stats.effect === 'healing') {
+      html += `<div class="item-stat">Heals ${stats.potency || 20} health</div>`;
+    }
+    
+    return html;
+  }
+  
+  /**
+   * Handle inventory slot click
+   * @param {Event} event - Click event
+   * @param {number} slotIndex - Inventory slot index
+   */
+  handleInventorySlotClick(event, slotIndex) {
+    // Skip if no player
+    if (!this.game.player) {
+      return;
+    }
+    
+    // Get item in slot
+    const item = this.game.player.inventory[slotIndex];
+    
+    if (item) {
+      // Show context menu
+      this.showItemContextMenu(item, event.clientX, event.clientY);
+    }
+  }
+  
+  /**
+   * Handle equipment slot click
+   * @param {Event} event - Click event
+   * @param {string} slotName - Equipment slot name
+   */
+  handleEquipmentSlotClick(event, slotName) {
+    // Skip if no player
+    if (!this.game.player) {
+      return;
+    }
+    
+    // Get item in slot
+    const item = this.game.player.equipment[slotName];
+    
+    if (item) {
+      // Show context menu
+      this.showItemContextMenu(item, event.clientX, event.clientY, true);
+    }
+  }
+  
+  /**
+   * Show item context menu
+   * @param {Object} item - The item
+   * @param {number} x - X position
+   * @param {number} y - Y position
+   * @param {boolean} isEquipped - Whether the item is equipped
+   */
+  showItemContextMenu(item, x, y, isEquipped = false) {
+    // Remove existing context menu
+    this.hideItemContextMenu();
+    
+    // Create context menu
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'item-context-menu';
+    contextMenu.style.position = 'absolute';
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    contextMenu.style.border = '1px solid #444';
+    contextMenu.style.borderRadius = '5px';
+    contextMenu.style.padding = '5px';
+    contextMenu.style.zIndex = '200';
+    
+    // Add actions
+    if (isEquipped) {
+      // Unequip action
+      const unequipAction = document.createElement('div');
+      unequipAction.textContent = 'Unequip';
+      unequipAction.style.padding = '5px 10px';
+      unequipAction.style.cursor = 'pointer';
+      unequipAction.addEventListener('click', () => {
+        // Send unequip action to server
+        this.game.network.sendItemInteraction('unequip', item.id);
+        this.hideItemContextMenu();
+      });
+      contextMenu.appendChild(unequipAction);
+    } else {
+      // Equip action (if equippable)
+      if (item.type !== 'potion') {
+        const equipAction = document.createElement('div');
+        equipAction.textContent = 'Equip';
+        equipAction.style.padding = '5px 10px';
+        equipAction.style.cursor = 'pointer';
+        equipAction.addEventListener('click', () => {
+          // Determine slot based on item type
+          let slot;
+          switch (item.type) {
+            case 'weapon':
+              slot = 'weapon';
+              break;
+            case 'helmet':
+              slot = 'head';
+              break;
+            case 'chest':
+              slot = 'body';
+              break;
+            case 'legs':
+              slot = 'legs';
+              break;
+            case 'boots':
+              slot = 'feet';
+              break;
+            case 'gloves':
+              slot = 'hands';
+              break;
+            case 'ring':
+              // Check if ring1 is empty, otherwise use ring2
+              slot = this.game.player.equipment.ring1 ? 'ring2' : 'ring1';
+              break;
+            case 'amulet':
+              slot = 'amulet';
+              break;
+          }
+          
+          // Send equip action to server
+          if (slot) {
+            this.game.network.sendItemInteraction('equip', item.id, slot);
+          }
+          
+          this.hideItemContextMenu();
+        });
+        contextMenu.appendChild(equipAction);
+      }
+      
+      // Use action (for potions)
+      if (item.type === 'potion') {
+        const useAction = document.createElement('div');
+        useAction.textContent = 'Use';
+        useAction.style.padding = '5px 10px';
+        useAction.style.cursor = 'pointer';
+        useAction.addEventListener('click', () => {
+          // Send use action to server
+          this.game.network.sendItemInteraction('use', item.id);
+          this.hideItemContextMenu();
+        });
+        contextMenu.appendChild(useAction);
+      }
+      
+      // Drop action
+      const dropAction = document.createElement('div');
+      dropAction.textContent = 'Drop';
+      dropAction.style.padding = '5px 10px';
+      dropAction.style.cursor = 'pointer';
+      dropAction.addEventListener('click', () => {
+        // Send drop action to server
+        this.game.network.sendItemInteraction('drop', item.id);
+        this.hideItemContextMenu();
+      });
+      contextMenu.appendChild(dropAction);
+    }
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Add click outside listener
+    setTimeout(() => {
+      window.addEventListener('click', this.hideItemContextMenu);
+    }, 0);
+  }
+  
+  /**
+   * Hide item context menu
+   */
+  hideItemContextMenu() {
+    // Remove existing context menu
+    const contextMenu = document.querySelector('.item-context-menu');
+    if (contextMenu) {
+      contextMenu.remove();
+    }
+    
+    // Remove click outside listener
+    window.removeEventListener('click', this.hideItemContextMenu);
+  }
+  
+  /**
+   * Show notification
+   * @param {string} message - Notification message
+   * @param {string} type - Notification type (default, boss, boss-kill)
+   */
+  showNotification(message, type = 'default') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.textContent = message;
+    
+    // Set notification style
+    notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    notification.style.color = '#FFFFFF';
+    notification.style.padding = '10px';
+    notification.style.marginBottom = '10px';
+    notification.style.borderRadius = '5px';
+    notification.style.transition = 'opacity 0.5s';
+    
+    // Set type-specific styles
+    if (type === 'boss') {
+      notification.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+      notification.style.fontWeight = 'bold';
+    } else if (type === 'boss-kill') {
+      notification.style.backgroundColor = 'rgba(255, 215, 0, 0.7)';
+      notification.style.color = '#000000';
+      notification.style.fontWeight = 'bold';
+    }
+    
+    // Add to notification container
+    this.notificationContainer.appendChild(notification);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      
+      // Remove from DOM after fade out
+      setTimeout(() => {
+        notification.remove();
+      }, 500);
+    }, 5000);
+  }
+  
+  /**
+   * Show pause menu
+   */
+  showPauseMenu() {
+    // Create pause menu if it doesn't exist
+    let pauseMenu = document.getElementById('pause-menu');
+    
+    if (!pauseMenu) {
+      pauseMenu = document.createElement('div');
+      pauseMenu.id = 'pause-menu';
+      pauseMenu.style.position = 'absolute';
+      pauseMenu.style.top = '0';
+      pauseMenu.style.left = '0';
+      pauseMenu.style.width = '100%';
+      pauseMenu.style.height = '100%';
+      pauseMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      pauseMenu.style.display = 'flex';
+      pauseMenu.style.flexDirection = 'column';
+      pauseMenu.style.justifyContent = 'center';
+      pauseMenu.style.alignItems = 'center';
+      pauseMenu.style.zIndex = '100';
+      
+      // Add title
+      const title = document.createElement('h1');
+      title.textContent = 'Game Paused';
+      title.style.color = '#FFFFFF';
+      title.style.marginBottom = '2rem';
+      pauseMenu.appendChild(title);
+      
+      // Add resume button
+      const resumeButton = document.createElement('button');
+      resumeButton.textContent = 'Resume';
+      resumeButton.style.padding = '1rem 2rem';
+      resumeButton.style.fontSize = '1.2rem';
+      resumeButton.style.backgroundColor = '#4a90e2';
+      resumeButton.style.color = 'white';
+      resumeButton.style.border = 'none';
+      resumeButton.style.borderRadius = '4px';
+      resumeButton.style.cursor = 'pointer';
+      resumeButton.style.marginBottom = '1rem';
+      resumeButton.addEventListener('click', () => {
+        this.game.togglePause();
+      });
+      pauseMenu.appendChild(resumeButton);
+      
+      // Add to game container
+      document.getElementById('game-container').appendChild(pauseMenu);
+    } else {
+      pauseMenu.style.display = 'flex';
+    }
+  }
+  
+  /**
+   * Hide pause menu
+   */
+  hidePauseMenu() {
+    const pauseMenu = document.getElementById('pause-menu');
+    
+    if (pauseMenu) {
+      pauseMenu.style.display = 'none';
+    }
+  }
+} 
