@@ -184,6 +184,84 @@ class Renderer {
   }
   
   /**
+   * Generate character preview images for the character selection screen
+   */
+  generateCharacterPreviews() {
+    try {
+      // Find all character preview elements in the HTML
+      const previewElements = document.querySelectorAll('.character-preview');
+      
+      if (!previewElements || previewElements.length === 0) {
+        console.warn("No character preview elements found in the DOM");
+        return;
+      }
+      
+      console.log(`Found ${previewElements.length} character preview elements`);
+      
+      // Process each preview element
+      previewElements.forEach(element => {
+        // Get the class name from the data attribute
+        const className = element.getAttribute('data-class-name');
+        if (!className) {
+          console.warn("Character preview element missing data-class-name attribute:", element);
+          return;
+        }
+        
+        try {
+          // Create a temporary PIXI application for rendering the preview
+          const app = new PIXI.Application({
+            width: 100,
+            height: 100,
+            transparent: true
+          });
+          
+          // Create a sprite representing the character
+          let sprite;
+          
+          // Use the appropriate texture based on the class
+          if (className.toLowerCase() === 'warrior') {
+            sprite = new PIXI.Sprite(this.playerTextures.warrior.default);
+          } else if (className.toLowerCase() === 'mage') {
+            sprite = new PIXI.Sprite(this.playerTextures.mage.default);
+          } else if (className.toLowerCase() === 'ranger') {
+            sprite = new PIXI.Sprite(this.playerTextures.ranger.default);
+          } else {
+            console.warn(`Unknown class name: ${className}`);
+            // Use a fallback texture
+            sprite = new PIXI.Sprite(this.createColoredRectTexture(0xCCCCCC, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE));
+          }
+          
+          // Position the sprite in the center of the preview
+          sprite.anchor.set(0.5);
+          sprite.position.set(app.renderer.width / 2, app.renderer.height / 2);
+          sprite.scale.set(1.5); // Make it a bit larger for visibility
+          
+          // Add the sprite to the application
+          app.stage.addChild(sprite);
+          
+          // Render the application once
+          app.render();
+          
+          // Add the canvas to the preview element
+          element.appendChild(app.view);
+          
+          // Store reference for cleanup later
+          if (!this.characterPreviews) {
+            this.characterPreviews = [];
+          }
+          this.characterPreviews.push(app);
+          
+          console.log(`Generated preview for ${className}`);
+        } catch (previewError) {
+          console.error(`Error generating preview for ${className}:`, previewError);
+        }
+      });
+    } catch (error) {
+      console.error("Error generating character previews:", error);
+    }
+  }
+  
+  /**
    * Generate and save sprite textures for use in-game
    */
   generateAndSaveSprites() {
@@ -652,26 +730,44 @@ class Renderer {
    * @returns {PIXI.Texture} The created texture
    */
   createTreeTexture() {
-    const graphics = new PIXI.Graphics();
-    
-    // Tree trunk
-    graphics.beginFill(0x8B4513); // Brown
-    graphics.drawRect(12, 20, 8, 12);
-    graphics.endFill();
-    
-    // Tree foliage
-    graphics.beginFill(0x228B22); // Forest Green
-    graphics.drawCircle(16, 12, 16);
-    graphics.endFill();
-    
-    // Add some detail to the foliage
-    graphics.beginFill(0x006400); // Dark Green
-    graphics.drawCircle(10, 8, 5);
-    graphics.drawCircle(22, 10, 6);
-    graphics.drawCircle(16, 4, 5);
-    graphics.endFill();
-    
-    return this.app.renderer.generateTexture(graphics);
+    try {
+      // Check if app is initialized
+      if (!this.app || !this.app.renderer) {
+        console.warn("Cannot create tree texture - renderer not initialized");
+        // Return a simple fallback texture
+        return this.createColoredRectTexture(0x008800, 32, 32);
+      }
+      
+      const graphics = new PIXI.Graphics();
+      
+      // Tree trunk
+      graphics.beginFill(0x8B4513); // Brown
+      graphics.drawRect(12, 20, 8, 12);
+      graphics.endFill();
+      
+      // Tree foliage
+      graphics.beginFill(0x228B22); // Forest Green
+      graphics.drawCircle(16, 12, 16);
+      graphics.endFill();
+      
+      // Add some detail to the foliage
+      graphics.beginFill(0x006400); // Dark Green
+      graphics.drawCircle(10, 8, 5);
+      graphics.drawCircle(22, 10, 6);
+      graphics.drawCircle(16, 4, 5);
+      graphics.endFill();
+      
+      const texture = this.app.renderer.generateTexture(graphics);
+      
+      // Clean up the graphics object to prevent memory leaks
+      graphics.destroy();
+      
+      return texture;
+    } catch (error) {
+      console.error("Error creating tree texture:", error);
+      // Return a simple fallback texture
+      return this.createColoredRectTexture(0x008800, 32, 32);
+    }
   }
   
   /**
@@ -679,20 +775,38 @@ class Renderer {
    * @returns {PIXI.Texture} The created texture
    */
   createRockTexture() {
-    const graphics = new PIXI.Graphics();
-    
-    // Main rock shape
-    graphics.beginFill(0x808080); // Gray
-    graphics.drawEllipse(16, 20, 16, 12);
-    graphics.endFill();
-    
-    // Add some highlights
-    graphics.beginFill(0xA9A9A9); // Dark Gray
-    graphics.drawEllipse(12, 16, 6, 4);
-    graphics.drawEllipse(20, 18, 4, 3);
-    graphics.endFill();
-    
-    return this.app.renderer.generateTexture(graphics);
+    try {
+      // Check if app is initialized
+      if (!this.app || !this.app.renderer) {
+        console.warn("Cannot create rock texture - renderer not initialized");
+        // Return a simple fallback texture
+        return this.createColoredRectTexture(0x808080, 32, 32);
+      }
+      
+      const graphics = new PIXI.Graphics();
+      
+      // Main rock shape
+      graphics.beginFill(0x808080); // Gray
+      graphics.drawEllipse(16, 20, 16, 12);
+      graphics.endFill();
+      
+      // Add some highlights
+      graphics.beginFill(0xA9A9A9); // Dark Gray
+      graphics.drawEllipse(12, 16, 6, 4);
+      graphics.drawEllipse(20, 18, 4, 3);
+      graphics.endFill();
+      
+      const texture = this.app.renderer.generateTexture(graphics);
+      
+      // Clean up the graphics object to prevent memory leaks
+      graphics.destroy();
+      
+      return texture;
+    } catch (error) {
+      console.error("Error creating rock texture:", error);
+      // Return a simple fallback texture
+      return this.createColoredRectTexture(0x808080, 32, 32);
+    }
   }
   
   /**
@@ -700,29 +814,47 @@ class Renderer {
    * @returns {PIXI.Texture} The created texture
    */
   createGrassTexture() {
-    const graphics = new PIXI.Graphics();
-    
-    // Base grass
-    graphics.beginFill(0x7CFC00); // Lawn Green
-    graphics.drawRect(0, 0, 32, 32);
-    graphics.endFill();
-    
-    // Add some grass blades
-    graphics.lineStyle(1, 0x006400); // Dark Green
-    
-    // Draw several grass blades
-    for (let i = 0; i < 10; i++) {
-      const x = Math.random() * 32;
-      const height = 4 + Math.random() * 8;
+    try {
+      // Check if app is initialized
+      if (!this.app || !this.app.renderer) {
+        console.warn("Cannot create grass texture - renderer not initialized");
+        // Return a simple fallback texture
+        return this.createColoredRectTexture(0x7CFC00, 32, 32);
+      }
       
-      graphics.moveTo(x, 32);
-      graphics.lineTo(x - 2, 32 - height);
+      const graphics = new PIXI.Graphics();
       
-      graphics.moveTo(x, 32);
-      graphics.lineTo(x + 2, 32 - height);
+      // Base grass
+      graphics.beginFill(0x7CFC00); // Lawn Green
+      graphics.drawRect(0, 0, 32, 32);
+      graphics.endFill();
+      
+      // Add some grass blades with fewer operations to reduce memory usage
+      graphics.lineStyle(1, 0x006400); // Dark Green
+      
+      // Draw fewer grass blades (5 instead of 10)
+      for (let i = 0; i < 5; i++) {
+        const x = 5 + i * 5; // More predictable positioning instead of random
+        const height = 4 + (i % 3) * 2; // Varied but predictable heights
+        
+        graphics.moveTo(x, 32);
+        graphics.lineTo(x - 2, 32 - height);
+        
+        graphics.moveTo(x, 32);
+        graphics.lineTo(x + 2, 32 - height);
+      }
+      
+      const texture = this.app.renderer.generateTexture(graphics);
+      
+      // Clean up the graphics object to prevent memory leaks
+      graphics.destroy();
+      
+      return texture;
+    } catch (error) {
+      console.error("Error creating grass texture:", error);
+      // Return a simple fallback texture
+      return this.createColoredRectTexture(0x7CFC00, 32, 32);
     }
-    
-    return this.app.renderer.generateTexture(graphics);
   }
   
   /**
@@ -1327,37 +1459,64 @@ class Renderer {
     // Skip if no camera or terrain features
     if (!this.camera || !this.terrainFeatures || !this.terrainContainer) return;
     
-    // Calculate visible area bounds with a larger margin for the bigger map
-    const visibleAreaWidth = CONFIG.GAME_WIDTH / this.camera.zoom;
-    const visibleAreaHeight = CONFIG.GAME_HEIGHT / this.camera.zoom;
-    
-    // Use a larger margin (200px) for the larger map to prevent pop-in
-    const margin = 200;
-    
-    const visibleBounds = {
-      left: this.camera.x - visibleAreaWidth / 2 - margin,
-      right: this.camera.x + visibleAreaWidth / 2 + margin,
-      top: this.camera.y - visibleAreaHeight / 2 - margin,
-      bottom: this.camera.y + visibleAreaHeight / 2 + margin
-    };
-    
-    // Remove sprites for features that are now out of view
-    for (const feature of this.terrainFeatures) {
-      const isVisible = 
-        feature.position.x >= visibleBounds.left && 
-        feature.position.x <= visibleBounds.right &&
-        feature.position.y >= visibleBounds.top && 
-        feature.position.y <= visibleBounds.bottom;
+    try {
+      // Calculate visible area bounds with a larger margin for the bigger map
+      const visibleAreaWidth = CONFIG.GAME_WIDTH / this.camera.zoom;
+      const visibleAreaHeight = CONFIG.GAME_HEIGHT / this.camera.zoom;
       
-      if (feature.sprite && !isVisible) {
-        // Remove sprite for off-screen feature to save memory
-        this.terrainContainer.removeChild(feature.sprite);
-        feature.sprite.destroy({children: true, texture: false, baseTexture: false});
-        feature.sprite = null;
-      } else if (!feature.sprite && isVisible) {
-        // Create sprite for newly visible features
-        this.createTerrainSprite(feature);
+      // Use a larger margin (200px) for the larger map to prevent pop-in
+      const margin = 200;
+      
+      const visibleBounds = {
+        left: this.camera.x - visibleAreaWidth / 2 - margin,
+        right: this.camera.x + visibleAreaWidth / 2 + margin,
+        top: this.camera.y - visibleAreaHeight / 2 - margin,
+        bottom: this.camera.y + visibleAreaHeight / 2 + margin
+      };
+      
+      // Count visible features for debugging
+      let visibleCount = 0;
+      let newlyVisibleCount = 0;
+      let newlyHiddenCount = 0;
+      
+      // Limit the number of new sprites created per frame to reduce memory spikes
+      const maxNewSpritesPerFrame = 20; // Cap new sprites per update
+      let newSpritesCreated = 0;
+      
+      // Remove sprites for features that are now out of view
+      for (const feature of this.terrainFeatures) {
+        const isVisible = 
+          feature.position.x >= visibleBounds.left && 
+          feature.position.x <= visibleBounds.right &&
+          feature.position.y >= visibleBounds.top && 
+          feature.position.y <= visibleBounds.bottom;
+        
+        if (feature.sprite && !isVisible) {
+          // Remove sprite for off-screen feature to save memory
+          this.terrainContainer.removeChild(feature.sprite);
+          feature.sprite.destroy({children: true, texture: false, baseTexture: false});
+          feature.sprite = null;
+          newlyHiddenCount++;
+        } else if (!feature.sprite && isVisible) {
+          // Only create a limited number of new sprites per frame
+          if (newSpritesCreated < maxNewSpritesPerFrame) {
+            // Create sprite for newly visible features
+            this.createTerrainSprite(feature);
+            newSpritesCreated++;
+            newlyVisibleCount++;
+          }
+          visibleCount++;
+        } else if (feature.sprite && isVisible) {
+          visibleCount++;
+        }
       }
+      
+      // Log debug info about terrain visibility (only occasionally to reduce console spam)
+      if (Math.random() < 0.05) { // Only log ~5% of the time
+        console.log(`Terrain update: ${visibleCount} visible, +${newlyVisibleCount} new, -${newlyHiddenCount} hidden`);
+      }
+    } catch (error) {
+      console.error("Error updating visible terrain:", error);
     }
   }
   
@@ -1366,32 +1525,37 @@ class Renderer {
    * @param {Object} feature - The terrain feature data
    */
   createTerrainSprite(feature) {
-    // Skip if feature already has a sprite
-    if (feature.sprite) return;
-    
-    let texture;
-    if (feature.type === 'tree') {
-      texture = this.textures.terrain.tree;
-    } else { // rock
-      texture = this.textures.terrain.rock;
+    try {
+      // Skip if feature already has a sprite
+      if (feature.sprite) return;
+      
+      let texture;
+      if (feature.type === 'tree') {
+        texture = this.textures.terrain.tree;
+      } else { // rock
+        texture = this.textures.terrain.rock;
+      }
+      
+      // Create sprite
+      const sprite = new PIXI.Sprite(texture);
+      sprite.position.set(feature.position.x, feature.position.y);
+      
+      // Set correct anchor based on type
+      if (feature.type === 'tree') {
+        sprite.anchor.set(0.5, 1.0); // Bottom center for trees
+      } else {
+        sprite.anchor.set(0.5, 0.5); // Center for rocks
+      }
+      
+      sprite.scale.set(feature.scale, feature.scale);
+      
+      // Store sprite reference and add to container
+      feature.sprite = sprite;
+      this.terrainContainer.addChild(sprite);
+      
+    } catch (error) {
+      console.error("Error creating terrain sprite:", error);
     }
-    
-    // Create sprite
-    const sprite = new PIXI.Sprite(texture);
-    sprite.position.set(feature.position.x, feature.position.y);
-    
-    // Set correct anchor based on type
-    if (feature.type === 'tree') {
-      sprite.anchor.set(0.5, 1.0); // Bottom center for trees
-    } else {
-      sprite.anchor.set(0.5, 0.5); // Center for rocks
-    }
-    
-    sprite.scale.set(feature.scale, feature.scale);
-    
-    // Store sprite reference and add to container
-    feature.sprite = sprite;
-    this.terrainContainer.addChild(sprite);
   }
   
   /**
