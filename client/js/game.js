@@ -28,7 +28,17 @@ class Game {
     this.deltaTime = 0;
     
     // Debug mode
-    this.debugMode = false; // Disable debug mode by default to reduce console spam
+    this.debugMode = true; // Enable debug mode to monitor memory usage
+    
+    // Memory monitoring
+    this.memoryMonitoring = {
+      enabled: true,
+      interval: null,
+      intervalTime: 10000, // Check every 10 seconds
+      lastMemory: 0,
+      memoryHistory: [],
+      maxHistorySize: 10
+    };
     
     // Bind methods
     this.update = this.update.bind(this);
@@ -43,6 +53,62 @@ class Game {
     this.handleProjectileCreated = this.handleProjectileCreated.bind(this);
     this.handleEffectEvent = this.handleEffectEvent.bind(this);
     this.handleWorldData = this.handleWorldData.bind(this);
+    this.monitorMemory = this.monitorMemory.bind(this);
+  }
+  
+  /**
+   * Monitor memory usage for debugging
+   */
+  monitorMemory() {
+    if (!this.memoryMonitoring.enabled) return;
+    
+    try {
+      // Get current memory info if available
+      if (window.performance && window.performance.memory) {
+        const memoryInfo = window.performance.memory;
+        const usedHeapSize = Math.round(memoryInfo.usedJSHeapSize / (1024 * 1024));
+        const totalHeapSize = Math.round(memoryInfo.totalJSHeapSize / (1024 * 1024));
+        const heapLimit = Math.round(memoryInfo.jsHeapSizeLimit / (1024 * 1024));
+        
+        // Calculate memory change since last check
+        const change = usedHeapSize - this.memoryMonitoring.lastMemory;
+        this.memoryMonitoring.lastMemory = usedHeapSize;
+        
+        // Add to history
+        this.memoryMonitoring.memoryHistory.push({
+          timestamp: Date.now(),
+          used: usedHeapSize,
+          change: change
+        });
+        
+        // Trim history to max size
+        if (this.memoryMonitoring.memoryHistory.length > this.memoryMonitoring.maxHistorySize) {
+          this.memoryMonitoring.memoryHistory.shift();
+        }
+        
+        // Check for significant memory increase
+        if (Math.abs(change) > 5) { // More than 5MB change
+          console.warn(`Memory change detected: ${change > 0 ? '+' : ''}${change}MB (${usedHeapSize}MB / ${totalHeapSize}MB, limit: ${heapLimit}MB)`);
+        } else {
+          console.log(`Memory usage: ${usedHeapSize}MB / ${totalHeapSize}MB (limit: ${heapLimit}MB)`);
+        }
+        
+        // Check if memory is approaching limit
+        if (usedHeapSize > heapLimit * 0.8) {
+          console.error(`WARNING: Memory usage is high (${usedHeapSize}MB / ${heapLimit}MB limit)!`);
+          
+          // Try to force garbage collection if possible
+          if (window.gc) {
+            console.log("Attempting to force garbage collection");
+            window.gc();
+          }
+        }
+      } else {
+        console.log("Memory monitoring not available in this browser");
+      }
+    } catch (error) {
+      console.error("Error monitoring memory:", error);
+    }
   }
   
   /**
@@ -86,6 +152,16 @@ class Game {
         // Mark game as running
         this.isRunning = true;
         
+        // Start memory monitoring
+        if (this.memoryMonitoring.enabled) {
+          // Initial memory check
+          this.monitorMemory();
+          
+          // Set up periodic memory monitoring
+          this.memoryMonitoring.interval = setInterval(this.monitorMemory, this.memoryMonitoring.intervalTime);
+          console.log(`Memory monitoring started (interval: ${this.memoryMonitoring.intervalTime}ms)`);
+        }
+        
         // Load assets and show character selection screen
         console.log("Starting asset loading...");
         this.loadAssets();
@@ -98,8 +174,30 @@ class Game {
       }
     } catch (error) {
       console.error("Critical error during game initialization:", error);
-      document.getElementById('error-message').textContent = error.message;
-      document.getElementById('error-overlay').classList.remove('hidden');
+      
+      // Safely show error to user, using multiple fallbacks
+      try {
+        // Try UI error first
+        if (this.ui && typeof this.ui.showError === 'function') {
+          this.ui.showError(error.message || "Game initialization failed");
+        } else {
+          // Try direct DOM manipulation
+          const errorMessage = document.getElementById('error-message');
+          const errorOverlay = document.getElementById('error-overlay');
+          
+          if (errorMessage && errorOverlay) {
+            errorMessage.textContent = error.message || "Game initialization failed";
+            errorOverlay.classList.remove('hidden');
+          } else {
+            // Last resort: alert
+            alert("Game initialization failed: " + (error.message || "Unknown error"));
+          }
+        }
+      } catch (displayError) {
+        // Absolutely last resort
+        console.error("Failed to display error:", displayError);
+        alert("Critical error occurred. Please check console for details.");
+      }
     }
   }
   
@@ -252,46 +350,111 @@ class Game {
   }
   
   /**
-   * Start the game
+   * Start the game with selected character
    */
   startGame() {
-    console.log("Start game button clicked");
-    const playerName = document.getElementById('player-name').value;
-    const selectedClass = document.querySelector('.character-option.selected');
+    // Get selected character class and player name
+    const selectedOption = document.querySelector('.character-option.selected');
+    const playerName = document.getElementById('player-name').value.trim();
     
-    if (!playerName || !selectedClass) {
-      console.warn("Cannot start game: missing player name or character class");
+    if (!selectedOption || !playerName) {
+      console.warn("Cannot start game: missing player selection or name");
+      this.ui.showError("Please select a character and enter your name.");
       return;
     }
     
-    const characterClass = selectedClass.getAttribute('data-class');
-    console.log(`Starting game with name: ${playerName}, class: ${characterClass}`);
+    // Get the character class from the selected option
+    const characterClass = selectedOption.getAttribute('data-class');
     
-    // Set debug mode based on checkbox
-    const debugCheckbox = document.getElementById('debug-mode');
-    this.debugMode = debugCheckbox ? debugCheckbox.checked : false;
-    console.log(`Debug mode: ${this.debugMode}`);
-    
-    try {
-      // Hide character selection
-      document.getElementById('character-select').classList.add('hidden');
-      
-      // Show game UI
-      document.getElementById('game-ui').classList.remove('hidden');
-      
-      // Join the game
-      console.log("Joining game via network...");
-      this.network.joinGame(playerName, characterClass);
-      
-      // Start game loop
-      this.isRunning = true;
-      this.gameStarted = true;
-      this.lastUpdateTime = performance.now();
-      requestAnimationFrame(this.update);
-      console.log("Game started successfully");
-    } catch (error) {
-      console.error("Error starting game:", error);
+    // Check for debug mode
+    this.debugMode = document.getElementById('debug-mode').checked;
+    if (this.debugMode) {
+      console.log("Debug mode enabled");
     }
+    
+    // Show loading state
+    const startButton = document.getElementById('start-game');
+    const originalText = startButton.textContent;
+    startButton.disabled = true;
+    startButton.textContent = "Connecting...";
+    
+    // Ensure network is connected
+    if (!this.network.connected) {
+      console.log("Network not connected, attempting to connect...");
+      
+      // Set up one-time event handlers for connection attempt
+      const handleConnectionSuccess = () => {
+        this.network.off('connected', handleConnectionSuccess);
+        this.network.off('connectionFailed', handleConnectionFailure);
+        
+        startButton.disabled = false;
+        startButton.textContent = originalText;
+        
+        // Proceed with game start
+        this.completeGameStart(playerName, characterClass);
+      };
+      
+      const handleConnectionFailure = () => {
+        this.network.off('connected', handleConnectionSuccess);
+        this.network.off('connectionFailed', handleConnectionFailure);
+        
+        startButton.disabled = false;
+        startButton.textContent = originalText;
+        
+        this.ui.showError("Unable to connect to the game server. Please check your internet connection and try again.");
+      };
+      
+      // Register event handlers
+      this.network.on('connected', handleConnectionSuccess);
+      this.network.on('connectionFailed', handleConnectionFailure);
+      
+      // Attempt to connect
+      this.network.init();
+    } else {
+      // Already connected, proceed with game start
+      this.completeGameStart(playerName, characterClass);
+    }
+  }
+  
+  /**
+   * Complete the game start process after ensuring network connectivity
+   * @param {string} playerName - The player's name
+   * @param {string} characterClass - The character's class
+   */
+  completeGameStart(playerName, characterClass) {
+    // Hide character selection
+    document.getElementById('character-select').classList.add('hidden');
+    
+    // Show game UI with loading state
+    const gameUI = document.getElementById('game-ui');
+    gameUI.classList.remove('hidden');
+    this.ui.showLoading("Joining game...");
+    
+    // Attempt to join the game
+    console.log("Attempting to join game...");
+    this.network.joinGame(playerName, characterClass)
+      .then(() => {
+        // Successfully joined
+        this.ui.hideLoading();
+        
+        // Start game loop
+        this.isRunning = true;
+        this.gameStarted = true;
+        this.lastUpdateTime = performance.now();
+        requestAnimationFrame(this.update);
+        
+        console.log("Game started successfully");
+      })
+      .catch(error => {
+        console.error("Failed to join game:", error);
+        
+        // Show error and return to character selection
+        this.ui.hideLoading();
+        this.ui.showError(error.message);
+        
+        document.getElementById('character-select').classList.remove('hidden');
+        gameUI.classList.add('hidden');
+      });
   }
   
   /**
@@ -370,6 +533,9 @@ class Game {
         monster.update(this.deltaTime);
       }
     });
+    
+    // Clean up inactive projectiles to prevent memory buildup
+    this.cleanupProjectiles();
   }
   
   /**
@@ -1068,5 +1234,57 @@ class Game {
     
     // Log world initialization
     console.log("World data initialized - Width:", this.world.width, "Height:", this.world.height);
+  }
+  
+  /**
+   * Properly shutdown the game and clean up resources
+   */
+  shutdown() {
+    try {
+      console.log("Game shutting down - cleaning up resources");
+      
+      // Set flag to stop the game loop
+      this.isRunning = false;
+      
+      // Stop memory monitoring
+      if (this.memoryMonitoring.interval) {
+        clearInterval(this.memoryMonitoring.interval);
+        this.memoryMonitoring.interval = null;
+        console.log("Memory monitoring stopped");
+      }
+      
+      // Final memory monitoring report
+      if (this.memoryMonitoring.enabled) {
+        console.log("Memory history during gameplay:");
+        this.memoryMonitoring.memoryHistory.forEach(entry => {
+          const date = new Date(entry.timestamp);
+          const timeStr = `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
+          console.log(`[${timeStr}] Used: ${entry.used}MB, Change: ${entry.change > 0 ? '+' : ''}${entry.change}MB`);
+        });
+      }
+      
+      // Clean up renderer resources
+      if (this.renderer && typeof this.renderer.destroy === 'function') {
+        this.renderer.destroy();
+      }
+      
+      // Clean up network connections
+      if (this.network && typeof this.network.disconnect === 'function') {
+        this.network.disconnect();
+      }
+      
+      // Remove event listeners
+      window.removeEventListener('resize', this.handleResize);
+      
+      // Try to force garbage collection if available
+      if (window.gc) {
+        console.log("Forcing garbage collection");
+        window.gc();
+      }
+      
+      console.log("Game resources cleaned up successfully");
+    } catch (error) {
+      console.error("Error during game shutdown:", error);
+    }
   }
 } 

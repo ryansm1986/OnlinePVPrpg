@@ -21,6 +21,10 @@ class Renderer {
       zoom: 1
     };
     
+    // Animation tracking to prevent memory leaks
+    this.activeAnimations = [];
+    this.animationCleanupInterval = null;
+    
     // Containers
     this.worldContainer = null;
     this.uiContainer = null;
@@ -139,8 +143,86 @@ class Renderer {
       
       // Set up ticker (animation loop)
       this.app.ticker.add(this.render);
+      
+      // Set up animation cleanup interval
+      this.setupAnimationCleanup();
+      
+      // Debug message
+      console.log("Renderer initialized successfully!");
     } catch (error) {
       console.error("Error initializing renderer:", error);
+      throw error; // Re-throw to allow game to handle
+    }
+  }
+  
+  /**
+   * Setup animation cleanup interval
+   */
+  setupAnimationCleanup() {
+    // Clean up animations every 5 seconds
+    this.animationCleanupInterval = setInterval(() => {
+      this.cleanupAnimations();
+    }, 5000);
+    
+    // Bind visibility change handler
+    this.handleVisibilityChange = () => {
+      if (document.hidden) {
+        this.cleanupAnimations();
+      }
+    };
+    
+    // Add visibility change listener to clean up when tab is not visible
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+  }
+  
+  /**
+   * Track an animation for potential cleanup
+   * @param {Object} animation - Animation object to track
+   * @param {PIXI.DisplayObject} sprite - The sprite associated with the animation
+   * @param {PIXI.Container} container - The container the sprite is in
+   * @param {number} maxAge - Maximum age in milliseconds before forced cleanup
+   */
+  trackAnimation(animation) {
+    if (!animation) return;
+    
+    this.activeAnimations.push({
+      id: Date.now() + Math.random(),
+      startTime: Date.now(),
+      animation: animation,
+      maxAge: animation.maxAge || 5000 // Default 5 seconds max lifetime
+    });
+  }
+  
+  /**
+   * Clean up animations that may have been abandoned
+   */
+  cleanupAnimations() {
+    const now = Date.now();
+    const expired = [];
+    
+    // Find expired animations
+    for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+      const anim = this.activeAnimations[i];
+      if (now - anim.startTime > anim.maxAge) {
+        expired.push(anim);
+        this.activeAnimations.splice(i, 1);
+      }
+    }
+    
+    // Force cleanup of expired animations
+    expired.forEach(anim => {
+      if (anim.animation.cleanup && typeof anim.animation.cleanup === 'function') {
+        try {
+          anim.animation.cleanup();
+        } catch (e) {
+          console.error("Error cleaning up animation:", e);
+        }
+      }
+    });
+    
+    // Log debug info
+    if (expired.length > 0 && this.game.debugMode) {
+      console.log(`Cleaned up ${expired.length} expired animations`);
     }
   }
   
@@ -1553,9 +1635,33 @@ class Renderer {
     this.entityLayer.removeChildren();
     this.itemLayer.removeChildren();
     
+    // Cache for reusing item graphics objects
+    if (!this._itemGraphicsCache) {
+      this._itemGraphicsCache = new Map();
+    }
+    
+    // Remove any stale cache entries
+    const currentItemIds = new Set(Array.from(this.game.items.keys()));
+    for (const itemId of this._itemGraphicsCache.keys()) {
+      if (!currentItemIds.has(itemId)) {
+        const graphics = this._itemGraphicsCache.get(itemId);
+        if (graphics) {
+          graphics.destroy();
+        }
+        this._itemGraphicsCache.delete(itemId);
+      }
+    }
+    
     // Draw items
-    this.game.items.forEach(item => {
-      const graphics = new PIXI.Graphics();
+    this.game.items.forEach((item, itemId) => {
+      // Reuse graphics object if it exists
+      let graphics = this._itemGraphicsCache.get(itemId);
+      if (!graphics) {
+        graphics = new PIXI.Graphics();
+        this._itemGraphicsCache.set(itemId, graphics);
+      } else {
+        graphics.clear();
+      }
       
       // Draw item based on rarity
       let color = 0xFFFFFF; // Default white for common items
@@ -1572,6 +1678,11 @@ class Renderer {
       this.itemLayer.addChild(graphics);
     });
     
+    // Cache for reusing player text objects
+    if (!this._playerTextCache) {
+      this._playerTextCache = new Map();
+    }
+    
     // Draw player
     if (this.game.player) {
       this.renderPlayerSprite(this.game.player, true);
@@ -1585,8 +1696,35 @@ class Renderer {
       this.renderPlayerSprite(player, false);
     });
     
+    // Cache for reusing monster graphics and text objects
+    if (!this._monsterGraphicsCache) {
+      this._monsterGraphicsCache = new Map();
+    }
+    
+    if (!this._monsterTextCache) {
+      this._monsterTextCache = new Map();
+    }
+    
+    // Remove any stale cache entries
+    const currentMonsterIds = new Set(Array.from(this.game.monsters.keys()));
+    for (const monsterId of this._monsterGraphicsCache.keys()) {
+      if (!currentMonsterIds.has(monsterId)) {
+        const graphics = this._monsterGraphicsCache.get(monsterId);
+        if (graphics) {
+          graphics.destroy();
+        }
+        this._monsterGraphicsCache.delete(monsterId);
+        
+        const text = this._monsterTextCache.get(monsterId);
+        if (text) {
+          text.destroy();
+        }
+        this._monsterTextCache.delete(monsterId);
+      }
+    }
+    
     // Draw monsters
-    this.game.monsters.forEach(monster => {
+    this.game.monsters.forEach((monster, monsterId) => {
       try {
         let sprite;
         
@@ -1594,22 +1732,33 @@ class Renderer {
         const texture = this.textures.monster[monster.type.toLowerCase()];
         
         if (texture) {
-          // Create sprite with the monster texture
-          sprite = new PIXI.Sprite(texture);
+          // Reuse sprite if it exists in cache
+          sprite = this._monsterGraphicsCache.get(monsterId);
+          if (!sprite) {
+            sprite = new PIXI.Sprite(texture);
+            this._monsterGraphicsCache.set(monsterId, sprite);
+            
+            // Set the anchor to center
+            sprite.anchor.set(0.5, 0.5);
+            
+            // Set size based on monster type
+            const monsterSize = monster.type === 'wolf' ? 48 : 40; // Larger size for wolf
+            sprite.width = monsterSize;
+            sprite.height = monsterSize;
+          }
           
-          // Set the anchor to center
-          sprite.anchor.set(0.5, 0.5);
-          
-          // Position the sprite
+          // Update position
           sprite.position.set(monster.position.x, monster.position.y);
-          
-          // Set size based on monster type
-          const monsterSize = monster.type === 'wolf' ? 48 : 40; // Larger size for wolf
-          sprite.width = monsterSize;
-          sprite.height = monsterSize;
         } else {
           // Fallback to simple shape if texture not found
-          sprite = new PIXI.Graphics();
+          sprite = this._monsterGraphicsCache.get(monsterId);
+          if (!sprite) {
+            sprite = new PIXI.Graphics();
+            this._monsterGraphicsCache.set(monsterId, sprite);
+          } else if (sprite instanceof PIXI.Graphics) {
+            sprite.clear();
+          }
+          
           sprite.lineStyle(2, 0xFFFFFF, 1.0);
           sprite.beginFill(0xFF0000, 0.8);
           
@@ -1621,11 +1770,17 @@ class Renderer {
           sprite.endFill();
         }
         
-        // Add monster type label
-        const nameText = new PIXI.Text(
-          `${monster.type} (${Math.round(monster.position.x)},${Math.round(monster.position.y)})`, 
-          { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF }
-        );
+        // Add or reuse monster type label
+        let nameText = this._monsterTextCache.get(monsterId);
+        const labelText = `${monster.type} (${Math.round(monster.position.x)},${Math.round(monster.position.y)})`;
+        
+        if (!nameText) {
+          nameText = new PIXI.Text(labelText, { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF });
+          this._monsterTextCache.set(monsterId, nameText);
+        } else {
+          nameText.text = labelText;
+        }
+        
         nameText.position.set(
           monster.position.x - nameText.width / 2,
           monster.position.y - (monster.type === 'wolf' ? 44 : 40) // Adjust label position for wolf
@@ -1662,8 +1817,19 @@ class Renderer {
       console.warn("playerTextures not initialized, creating fallback textures");
       this.playerTextures = {};
     }
+    
+    // Initialize cache for player sprites if not exists
+    if (!this._playerSpriteCache) {
+      this._playerSpriteCache = new Map();
+    }
+    
+    // Initialize cache for player text labels if not exists
+    if (!this._playerTextCache) {
+      this._playerTextCache = new Map();
+    }
 
     const charClass = player.characterClass || 'warrior';
+    const playerId = player.id || 'local-player';
     
     // Ensure textures for this class exist
     if (!this.playerTextures[charClass]) {
@@ -1685,8 +1851,8 @@ class Renderer {
       // Get the textures for this class
       const textures = this.playerTextures[charClass];
       
-      // Create sprite using appropriate texture
-      let sprite;
+      // Create or reuse sprite
+      let sprite = this._playerSpriteCache.get(playerId);
       
       // Check if this is an animated spritesheet (has direction frames)
       if (textures.down && textures.down.length > 0) {
@@ -1711,22 +1877,46 @@ class Renderer {
         const animationSpeed = 200; // ms per frame
         const frameIndex = Math.floor(Date.now() / animationSpeed) % directionFrames.length;
         
-        // Create sprite using the calculated frame
-        sprite = new PIXI.Sprite(directionFrames[frameIndex]);
+        // Get the current texture
+        const currentTexture = directionFrames[frameIndex];
+        
+        // Create sprite if it doesn't exist, or update texture if it does
+        if (!sprite) {
+          // Create new sprite
+          sprite = new PIXI.Sprite(currentTexture);
+          this._playerSpriteCache.set(playerId, sprite);
+          
+          // Set the anchor to center the sprite on the player's position
+          sprite.anchor.set(0.5, 0.5);
+          
+          // Set the size
+          sprite.width = CONFIG.PLAYER_SIZE;
+          sprite.height = CONFIG.PLAYER_SIZE;
+        } else {
+          // Update existing sprite texture
+          sprite.texture = currentTexture;
+        }
       } else {
         // Use default/static texture
-        sprite = new PIXI.Sprite(textures.default);
+        if (!sprite) {
+          // Create new sprite
+          sprite = new PIXI.Sprite(textures.default);
+          this._playerSpriteCache.set(playerId, sprite);
+          
+          // Set the anchor to center the sprite on the player's position
+          sprite.anchor.set(0.5, 0.5);
+          
+          // Set the size
+          sprite.width = CONFIG.PLAYER_SIZE;
+          sprite.height = CONFIG.PLAYER_SIZE;
+        } else {
+          // Update existing sprite texture
+          sprite.texture = textures.default;
+        }
       }
       
-      // Set the anchor to center the sprite on the player's position
-      sprite.anchor.set(0.5, 0.5);
-      
-      // Position the sprite at the player's position
+      // Update position
       sprite.position.set(player.position.x, player.position.y);
-      
-      // Set the size
-      sprite.width = CONFIG.PLAYER_SIZE;
-      sprite.height = CONFIG.PLAYER_SIZE;
       
       // Add the sprite to the entity layer
       this.entityLayer.addChild(sprite);
@@ -1740,8 +1930,16 @@ class Renderer {
       // Log the error
       console.error(`Error creating sprite for ${isLocalPlayer ? 'local' : 'other'} player (${charClass}):`, error);
       
-      // Fall back to a colored rectangle
-      const playerGraphics = new PIXI.Graphics();
+      // Get or create fallback graphics
+      let playerGraphics = this._playerSpriteCache.get(playerId);
+      if (!playerGraphics || !(playerGraphics instanceof PIXI.Graphics)) {
+        // Create new graphics
+        playerGraphics = new PIXI.Graphics();
+        this._playerSpriteCache.set(playerId, playerGraphics);
+      } else {
+        // Clear existing graphics
+        playerGraphics.clear();
+      }
       
       // Draw the player as a colored rectangle
       const colors = {
@@ -1766,14 +1964,22 @@ class Renderer {
       this.entityLayer.addChild(playerGraphics);
     }
     
-    // Always add name tag
-    const nameText = new PIXI.Text(
-      isLocalPlayer ? 
-        `YOU (${Math.round(player.position.x)},${Math.round(player.position.y)})` : 
-        player.name, 
-      { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF }
-    );
+    // Get or create name text
+    let nameText = this._playerTextCache.get(playerId);
+    const displayText = isLocalPlayer ? 
+      `YOU (${Math.round(player.position.x)},${Math.round(player.position.y)})` : 
+      player.name;
+      
+    if (!nameText) {
+      // Create new text
+      nameText = new PIXI.Text(displayText, { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF });
+      this._playerTextCache.set(playerId, nameText);
+    } else {
+      // Update existing text
+      nameText.text = displayText;
+    }
     
+    // Update position
     nameText.position.set(
       player.position.x - nameText.width / 2,
       player.position.y - CONFIG.PLAYER_SIZE/2 - 20
@@ -1809,8 +2015,14 @@ class Renderer {
       // Add to effect layer
       this.effectLayer.addChild(explosion);
       
+      // Flag to track if animation is still active
+      let isActive = true;
+      
       // Animate the explosion
       const animate = () => {
+        // Check if animation should continue
+        if (!isActive) return;
+        
         // Get current explosion props
         let currentAlpha = explosion.alpha;
         let currentScale = explosion.scale.x;
@@ -1827,9 +2039,32 @@ class Renderer {
         if (currentAlpha > 0) {
           requestAnimationFrame(animate);
         } else {
+          // Clean up
+          cleanup();
+        }
+      };
+      
+      // Cleanup function
+      const cleanup = () => {
+        if (!isActive) return; // Prevent double cleanup
+        
+        isActive = false;
+        
+        // Remove the explosion if it's still in the effect layer
+        if (explosion && explosion.parent === this.effectLayer) {
           this.effectLayer.removeChild(explosion);
         }
       };
+      
+      // Create animation object for tracking
+      const animation = {
+        startTime: Date.now(),
+        maxAge: 2000, // 2 seconds max lifetime
+        cleanup: cleanup
+      };
+      
+      // Track the animation for cleanup
+      this.trackAnimation(animation);
       
       // Start animation
       requestAnimationFrame(animate);
@@ -1872,11 +2107,17 @@ class Renderer {
       // Add the text to the UI container (so it's not affected by camera)
       this.uiContainer.addChild(damageText);
       
+      // Flag to track if animation is still active
+      let isActive = true;
+      
       // Animate the text
       const duration = 1000; // Animation duration in milliseconds
       const startTime = performance.now();
       
       const animate = () => {
+        // Check if still active
+        if (!isActive) return;
+        
         const elapsed = performance.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
@@ -1887,10 +2128,31 @@ class Renderer {
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
-          // Remove the text when animation completes
+          cleanup();
+        }
+      };
+      
+      // Cleanup function
+      const cleanup = () => {
+        if (!isActive) return; // Prevent double cleanup
+        
+        isActive = false;
+        
+        // Remove the text if it's still in the UI container
+        if (damageText && damageText.parent === this.uiContainer) {
           this.uiContainer.removeChild(damageText);
         }
       };
+      
+      // Create animation object for tracking
+      const animation = {
+        startTime: Date.now(),
+        maxAge: 2000, // 2 seconds max lifetime
+        cleanup: cleanup
+      };
+      
+      // Track the animation for cleanup
+      this.trackAnimation(animation);
       
       // Start the animation
       requestAnimationFrame(animate);
@@ -1927,11 +2189,17 @@ class Renderer {
       // Add to effect layer
       this.effectLayer.addChild(flash);
       
+      // Flag to track if animation is still active
+      let isActive = true;
+      
       // Animate the flash effect
       const duration = 300; // Animation duration in milliseconds
       const startTime = performance.now();
       
       const animate = () => {
+        // Check if still active
+        if (!isActive) return;
+        
         const elapsed = performance.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
@@ -1942,10 +2210,31 @@ class Renderer {
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
-          // Remove the flash when animation completes
+          cleanup();
+        }
+      };
+      
+      // Cleanup function
+      const cleanup = () => {
+        if (!isActive) return; // Prevent double cleanup
+        
+        isActive = false;
+        
+        // Remove the flash if it's still in the effect layer
+        if (flash && flash.parent === this.effectLayer) {
           this.effectLayer.removeChild(flash);
         }
       };
+      
+      // Create animation object for tracking
+      const animation = {
+        startTime: Date.now(),
+        maxAge: 1000, // 1 second max lifetime
+        cleanup: cleanup
+      };
+      
+      // Track the animation for cleanup
+      this.trackAnimation(animation);
       
       // Start the animation
       requestAnimationFrame(animate);
@@ -1997,12 +2286,16 @@ class Renderer {
       this.minimapContainer.addChild(this.minimapContent);
     }
     
-    // Clear minimap content
-    this.minimapContent.removeChildren();
+    // Create or reuse minimap graphics
+    if (!this._minimapGraphics) {
+      this._minimapGraphics = new PIXI.Graphics();
+      this.minimapContent.addChild(this._minimapGraphics);
+    } else {
+      this._minimapGraphics.clear();
+    }
     
-    // Create minimap content graphics
-    const minimapGraphics = new PIXI.Graphics();
-    this.minimapContent.addChild(minimapGraphics);
+    // Reference to graphics for easier access
+    const minimapGraphics = this._minimapGraphics;
     
     // Determine minimap scale based on world size
     const worldSize = Math.max(CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
@@ -2067,28 +2360,28 @@ class Renderer {
     
     // Draw other players
     if (this.game.players) {
+      minimapGraphics.beginFill(0x0000FF);
       this.game.players.forEach(player => {
-        minimapGraphics.beginFill(0x0000FF);
         minimapGraphics.drawCircle(
           player.position.x * minimapScale,
           player.position.y * minimapScale,
           2
         );
-        minimapGraphics.endFill();
       });
+      minimapGraphics.endFill();
     }
     
     // Draw monsters
     if (this.game.monsters) {
+      minimapGraphics.beginFill(0xFF0000);
       this.game.monsters.forEach(monster => {
-        minimapGraphics.beginFill(0xFF0000);
         minimapGraphics.drawCircle(
           monster.position.x * minimapScale,
           monster.position.y * minimapScale,
           2
         );
-        minimapGraphics.endFill();
       });
+      minimapGraphics.endFill();
     }
   }
 
@@ -2136,39 +2429,90 @@ class Renderer {
    * Render all projectiles
    */
   renderProjectiles() {
-    // Clear projectile layer
+    // Skip if projectile layer doesn't exist
     if (!this.projectileLayer) {
       console.warn("No projectile layer initialized");
       return;
     }
     
+    // Create projectile sprite cache if not exists
+    if (!this._projectileSpritePool) {
+      this._projectileSpritePool = {
+        fireball: [],
+        arrow: [],
+        default: []
+      };
+    }
+    
+    // Clear projectile layer but save sprites for reuse
+    const spritesToReuse = [];
+    for (let i = 0; i < this.projectileLayer.children.length; i++) {
+      const sprite = this.projectileLayer.children[i];
+      // Skip any non-sprite objects
+      if (!(sprite instanceof PIXI.Sprite || sprite instanceof PIXI.Graphics)) continue;
+      
+      // Determine type based on texture
+      let type = 'default';
+      if (sprite.texture === this.textures.projectile.fireball) {
+        type = 'fireball';
+      } else if (sprite.texture === this.textures.projectile.arrow) {
+        type = 'arrow';
+      }
+      
+      // Store in the pool
+      this._projectileSpritePool[type].push(sprite);
+    }
+    
+    // Clear projectile layer
     this.projectileLayer.removeChildren();
     
-    // Helper function to render a single projectile
+    // Helper function to render a single projectile using sprite pooling
     const renderSingleProjectile = (projectile) => {
       if (!projectile || !projectile.active || !projectile.position) return;
       
-      // Create sprite based on projectile type
+      // Get a sprite from the pool or create a new one
       let sprite;
+      let type = projectile.type || 'default';
       
-      if (projectile.type === 'fireball') {
-        sprite = new PIXI.Sprite(this.textures.projectile.fireball || this.createFireballTexture());
+      if (type === 'fireball') {
+        if (this._projectileSpritePool.fireball.length > 0) {
+          sprite = this._projectileSpritePool.fireball.pop();
+        } else {
+          sprite = new PIXI.Sprite(this.textures.projectile.fireball || this.createFireballTexture());
+        }
         
         // Add rotation for fireballs
         sprite.rotation = Date.now() * 0.005;
       } 
-      else if (projectile.type === 'arrow') {
-        sprite = new PIXI.Sprite(this.textures.projectile.arrow || this.createArrowTexture());
+      else if (type === 'arrow') {
+        if (this._projectileSpritePool.arrow.length > 0) {
+          sprite = this._projectileSpritePool.arrow.pop();
+        } else {
+          sprite = new PIXI.Sprite(this.textures.projectile.arrow || this.createArrowTexture());
+        }
         
         // Set arrow rotation based on angle
         sprite.rotation = ((projectile.angle || 0) * Math.PI) / 180;
       }
       else {
-        // Default projectile if type not recognized
-        sprite = new PIXI.Graphics();
-        sprite.beginFill(0xFFFF00);
-        sprite.drawRect(0, 0, 16, 8);
-        sprite.endFill();
+        // Default projectile
+        if (this._projectileSpritePool.default.length > 0) {
+          sprite = this._projectileSpritePool.default.pop();
+          
+          // If it's a graphics object, clear it
+          if (sprite instanceof PIXI.Graphics) {
+            sprite.clear();
+            sprite.beginFill(0xFFFF00);
+            sprite.drawRect(0, 0, 16, 8);
+            sprite.endFill();
+          }
+        } else {
+          // Create a new default sprite
+          sprite = new PIXI.Graphics();
+          sprite.beginFill(0xFFFF00);
+          sprite.drawRect(0, 0, 16, 8);
+          sprite.endFill();
+        }
       }
       
       // Set position
@@ -2203,6 +2547,27 @@ class Renderer {
           });
         }
       });
+    }
+    
+    // Limit pool size to avoid memory bloat
+    const maxPoolSize = 50; // Maximum sprites to keep in each pool
+    
+    if (this._projectileSpritePool.fireball.length > maxPoolSize) {
+      // Remove excess sprites
+      const toRemove = this._projectileSpritePool.fireball.splice(0, this._projectileSpritePool.fireball.length - maxPoolSize);
+      toRemove.forEach(sprite => sprite.destroy());
+    }
+    
+    if (this._projectileSpritePool.arrow.length > maxPoolSize) {
+      // Remove excess sprites
+      const toRemove = this._projectileSpritePool.arrow.splice(0, this._projectileSpritePool.arrow.length - maxPoolSize);
+      toRemove.forEach(sprite => sprite.destroy());
+    }
+    
+    if (this._projectileSpritePool.default.length > maxPoolSize) {
+      // Remove excess sprites
+      const toRemove = this._projectileSpritePool.default.splice(0, this._projectileSpritePool.default.length - maxPoolSize);
+      toRemove.forEach(sprite => sprite.destroy());
     }
   }
   
@@ -2261,8 +2626,14 @@ class Renderer {
       // Add to effect layer
       this.effectLayer.addChild(slash);
       
+      // Flag to track if animation is still active
+      let isActive = true;
+      
       // Animate the slash
       const animate = () => {
+        // Check if still active
+        if (!isActive) return;
+        
         // Get current slash props
         let currentAlpha = slash.alpha;
         let currentScale = slash.scale.x;
@@ -2279,9 +2650,31 @@ class Renderer {
         if (currentAlpha > 0) {
           requestAnimationFrame(animate);
         } else {
+          cleanup();
+        }
+      };
+      
+      // Cleanup function
+      const cleanup = () => {
+        if (!isActive) return; // Prevent double cleanup
+        
+        isActive = false;
+        
+        // Remove the slash if it's still in the effect layer
+        if (slash && slash.parent === this.effectLayer) {
           this.effectLayer.removeChild(slash);
         }
       };
+      
+      // Create animation object for tracking
+      const animation = {
+        startTime: Date.now(),
+        maxAge: 1000, // 1 second max lifetime
+        cleanup: cleanup
+      };
+      
+      // Track the animation for cleanup
+      this.trackAnimation(animation);
       
       // Start animation
       requestAnimationFrame(animate);
@@ -2320,5 +2713,90 @@ class Renderer {
     this.textures.monster.golem = this.createColoredRectTexture(0x777777, 64, 64);
     this.textures.monster.griffon = this.createColoredRectTexture(0xFFAA00, 48, 48);
     this.textures.monster.harpy = this.createColoredRectTexture(0xFF00FF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+  }
+
+  /**
+   * Clean up resources before game destruction
+   */
+  destroy() {
+    try {
+      // Clear animation cleanup interval
+      if (this.animationCleanupInterval) {
+        clearInterval(this.animationCleanupInterval);
+        this.animationCleanupInterval = null;
+      }
+      
+      // Force cleanup of all active animations
+      this.cleanupAnimations();
+      
+      // Clear all event listeners
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      
+      // Destroy all sprites and containers
+      if (this.app) {
+        // Clean up all terrain sprites
+        if (this.terrainFeatures) {
+          for (const feature of this.terrainFeatures) {
+            if (feature.sprite) {
+              feature.sprite.destroy({children: true, texture: false, baseTexture: false});
+              feature.sprite = null;
+            }
+          }
+        }
+        
+        // Clean up all sprite maps
+        [this.playerSprites, this.monsterSprites, this.bossSprites, this.itemSprites, this.projectileSprites].forEach(spriteMap => {
+          if (spriteMap) {
+            spriteMap.forEach(sprite => {
+              if (sprite) sprite.destroy({children: true, texture: false, baseTexture: false});
+            });
+            spriteMap.clear();
+          }
+        });
+        
+        // Destroy all containers and their children
+        const containersToDestroy = [
+          this.worldContainer, this.uiContainer, this.minimapContainer, 
+          this.groundLayer, this.itemLayer, this.entityLayer, 
+          this.effectLayer, this.projectileLayer, this.terrainContainer,
+          this.minimapContent
+        ];
+        
+        containersToDestroy.forEach(container => {
+          if (container) {
+            container.removeChildren();
+            container.destroy({children: true});
+          }
+        });
+        
+        // Destroy all textures
+        Object.values(this.textures).forEach(category => {
+          Object.values(category).forEach(texture => {
+            if (texture && texture.destroy) {
+              texture.destroy(true);
+            }
+          });
+        });
+        
+        // Clean up the PixiJS application
+        this.app.destroy(true, {
+          children: true,
+          texture: true,
+          baseTexture: true
+        });
+        this.app = null;
+      }
+      
+      // Clear references to reduce memory usage
+      this.terrainFeatures = null;
+      this.textures = null;
+      this.playerTextures = null;
+      this.gridGraphics = null;
+      this.grassBackground = null;
+      
+      console.log("Renderer resources cleaned up successfully");
+    } catch (error) {
+      console.error("Error cleaning up renderer resources:", error);
+    }
   }
 } 
