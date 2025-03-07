@@ -554,26 +554,38 @@ class Game {
     let hasCollision = false;
     
     // Only check terrain features that are close to the player for efficiency
-    // This is much more efficient than checking all features, especially with a large world
     for (const feature of this.renderer.terrainFeatures) {
-      // Skip checking features that are too far away
-      const maxDistance = playerRadius + Math.max(feature.radius, 20);
+      // Calculate distance between player and feature
       const dx = player.position.x - feature.position.x;
       const dy = player.position.y - feature.position.y;
-      
-      // Quick check with squared distance (avoids expensive sqrt)
       const distanceSquared = dx * dx + dy * dy;
-      if (distanceSquared > maxDistance * maxDistance) {
-        continue;
-      }
       
-      // More precise distance calculation
-      const distance = Math.sqrt(distanceSquared);
-      
-      // Check if collision occurs
-      if (distance < (playerRadius + feature.radius)) {
-        hasCollision = true;
-        break;
+      // Different collision handling based on feature type
+      if (feature.type === 'tree') {
+        // Use a much larger collision radius for trees
+        const treeCollisionRadius = feature.radius * 1.5;
+        const collisionThresholdSquared = Math.pow(playerRadius + treeCollisionRadius, 2);
+        
+        // Check for tree collision with squared distance (more efficient)
+        if (distanceSquared < collisionThresholdSquared) {
+          hasCollision = true;
+          break;
+        }
+      } else {
+        // For non-tree objects, use standard collision detection
+        const maxDistance = playerRadius + feature.radius;
+        
+        // Skip if obviously too far
+        if (distanceSquared > maxDistance * maxDistance * 1.5) {
+          continue;
+        }
+        
+        // More precise check
+        const distance = Math.sqrt(distanceSquared);
+        if (distance < (playerRadius + feature.radius - 2)) { // Small forgiveness for rocks
+          hasCollision = true;
+          break;
+        }
       }
     }
     

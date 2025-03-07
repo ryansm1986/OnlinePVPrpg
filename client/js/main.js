@@ -6,8 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM content loaded, initializing game...");
     
     // Create and initialize the game
-    const game = new Game();
-    game.init();
+    window.game = new Game();
+    window.game.init();
     
     // Fallback for character selection
     setTimeout(() => {
@@ -18,48 +18,37 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Function to select character
         const selectCharacter = (option) => {
-          console.log("Fallback character selection activated");
           // Remove selected class from all options
           characterOptions.forEach(opt => opt.classList.remove('selected'));
+          
           // Add selected class to clicked option
           option.classList.add('selected');
           
-          // Check start button state
-          const nameInput = document.getElementById('player-name');
-          const startButton = document.getElementById('start-game');
-          
-          if (startButton && nameInput && nameInput.value) {
-            startButton.disabled = false;
-            console.log("Start button enabled by fallback mechanism");
+          // Check if start button should be enabled
+          if (window.game && typeof window.game.checkStartButtonState === 'function') {
+            window.game.checkStartButtonState();
           }
         };
         
-        // Add direct click handlers
+        // Add click handlers to each option
         characterOptions.forEach(option => {
-          option.onclick = function() {
-            selectCharacter(option);
-          };
+          option.addEventListener('click', () => selectCharacter(option));
         });
         
-        // Set up manual start game button handler
+        // Set up start button handler
         const startButton = document.getElementById('start-game');
         if (startButton) {
-          startButton.onclick = function() {
-            const selectedClass = document.querySelector('.character-option.selected');
-            const playerName = document.getElementById('player-name').value;
-            
-            if (selectedClass && playerName) {
-              console.log("Manual game start triggered");
-              if (game && typeof game.startGame === 'function') {
-                game.startGame();
-              }
+          startButton.addEventListener('click', () => {
+            if (window.game && typeof window.game.startGame === 'function') {
+              window.game.startGame();
             } else {
-              console.warn("Cannot start game: missing player name or character selection");
+              console.error("Game object or startGame method not available");
+              alert("Unable to start game. Please refresh the page and try again.");
             }
-          };
+          });
         }
       }
-    }, 3000); // Wait for everything to be fully loaded
+    }, 1000); // Wait 1 second to ensure everything is loaded
     
     // Explicitly load assets to show character select screen
     setTimeout(() => {
@@ -81,5 +70,17 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Game initialization complete");
   } catch (error) {
     console.error("Critical error during game startup:", error);
+    
+    // Try to show error in UI
+    const errorMessage = document.getElementById('error-message');
+    const errorOverlay = document.getElementById('error-overlay');
+    
+    if (errorMessage && errorOverlay) {
+      errorMessage.textContent = error.message || "Failed to start game";
+      errorOverlay.classList.remove('hidden');
+    } else {
+      // Fallback to alert
+      alert("Critical error: " + (error.message || "Failed to start game"));
+    }
   }
 }); 

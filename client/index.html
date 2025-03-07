@@ -18,6 +18,15 @@
       <p class="loading-text">Loading...</p>
     </div>
     
+    <!-- Error overlay for displaying critical errors -->
+    <div id="error-overlay" class="hidden">
+      <div class="error-content">
+        <h2>Error</h2>
+        <p id="error-message">An error occurred.</p>
+        <button onclick="location.reload()">Reload Game</button>
+      </div>
+    </div>
+    
     <!-- Character selection screen -->
     <div id="character-select" class="hidden">
       <h1>Choose Your Character</h1>

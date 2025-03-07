@@ -19,45 +19,112 @@ class UI {
     this.inventorySlots = [];
     this.equipmentSlots = {};
     this.notificationContainer = null;
+    this.notifications = [];
+    this.maxNotifications = 5;
+    this.notificationDuration = 3000;
+    this.loadingOverlay = null;
+    this.errorOverlay = null;
     
-    // Bind methods
+    // Bind methods - only bind methods that are defined in the class
     this.updatePlayerStats = this.updatePlayerStats.bind(this);
     this.updateInventory = this.updateInventory.bind(this);
     this.showNotification = this.showNotification.bind(this);
+    
+    // Define the missing methods to prevent errors
   }
   
   /**
    * Initialize UI
    */
   init() {
-    // Get UI elements
-    this.healthBar = document.querySelector('.health-fill');
-    this.healthText = document.querySelector('.health-text');
-    this.xpBar = document.querySelector('.xp-fill');
-    this.xpText = document.querySelector('.xp-text');
-    
-    // Get skill cooldown elements
-    const skillElements = document.querySelectorAll('.skill');
-    skillElements.forEach(element => {
-      const skillId = parseInt(element.getAttribute('data-skill'));
-      this.skillCooldowns[skillId] = element.querySelector('.cooldown-overlay');
-    });
-    
-    // Create notification container
-    this.notificationContainer = document.createElement('div');
-    this.notificationContainer.className = 'notification-container';
-    this.notificationContainer.style.position = 'absolute';
-    this.notificationContainer.style.top = '20px';
-    this.notificationContainer.style.right = '20px';
-    this.notificationContainer.style.width = '300px';
-    this.notificationContainer.style.zIndex = '100';
-    document.getElementById('game-container').appendChild(this.notificationContainer);
-    
-    // Set up inventory
-    this.setupInventory();
-    
-    // Set up equipment slots
-    this.setupEquipmentSlots();
+    try {
+      console.log("Initializing UI elements...");
+      
+      // Get UI elements safely
+      this.healthBar = document.querySelector('.health-fill');
+      this.healthText = document.querySelector('.health-text');
+      this.xpBar = document.querySelector('.xp-fill');
+      this.xpText = document.querySelector('.xp-text');
+      
+      // Get skill cooldown elements
+      const skillElements = document.querySelectorAll('.skill');
+      skillElements.forEach(element => {
+        const skillId = parseInt(element.getAttribute('data-skill'));
+        this.skillCooldowns[skillId] = element.querySelector('.cooldown-overlay');
+      });
+      
+      // Get game container safely
+      const gameContainer = document.getElementById('game-container');
+      if (!gameContainer) {
+        console.warn("Game container not found, creating fallback container");
+        // Create a fallback container if needed
+        const fallbackContainer = document.createElement('div');
+        fallbackContainer.id = 'game-container';
+        document.body.appendChild(fallbackContainer);
+      }
+      
+      // Create notification container
+      this.notificationContainer = document.createElement('div');
+      this.notificationContainer.className = 'notification-container';
+      this.notificationContainer.style.position = 'absolute';
+      this.notificationContainer.style.top = '20px';
+      this.notificationContainer.style.right = '20px';
+      this.notificationContainer.style.width = '300px';
+      this.notificationContainer.style.zIndex = '100';
+      
+      // Safely append to game container
+      const containerTarget = document.getElementById('game-container') || document.body;
+      containerTarget.appendChild(this.notificationContainer);
+      
+      // Create loading overlay
+      this.loadingOverlay = document.createElement('div');
+      this.loadingOverlay.className = 'loading-overlay hidden';
+      this.loadingOverlay.innerHTML = `
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <div class="loading-message">Loading...</div>
+        </div>
+      `;
+      document.body.appendChild(this.loadingOverlay);
+      
+      // Create error overlay
+      this.errorOverlay = document.createElement('div');
+      this.errorOverlay.className = 'error-overlay hidden';
+      this.errorOverlay.innerHTML = `
+        <div class="error-content">
+          <div class="error-icon">⚠️</div>
+          <div class="error-message"></div>
+          <button class="error-close">OK</button>
+        </div>
+      `;
+      document.body.appendChild(this.errorOverlay);
+      
+      // Add click handler to close error overlay
+      const closeButton = this.errorOverlay.querySelector('.error-close');
+      if (closeButton) {
+        closeButton.addEventListener('click', () => {
+          this.errorOverlay.classList.add('hidden');
+        });
+      }
+      
+      // Bind methods that weren't bound in constructor
+      this.removeNotification = this.removeNotification.bind(this);
+      this.showLoading = this.showLoading.bind(this);
+      this.hideLoading = this.hideLoading.bind(this);
+      this.showError = this.showError.bind(this);
+      
+      // Set up inventory
+      this.setupInventory();
+      
+      // Set up equipment slots
+      this.setupEquipmentSlots();
+      
+      console.log("UI initialized successfully");
+    } catch (error) {
+      console.error("Error initializing UI:", error);
+      // Create at least a minimal error display capability
+      alert("Error initializing game interface: " + error.message);
+    }
   }
   
   /**
@@ -636,6 +703,19 @@ class UI {
       playerNameInput.value = '';
     }
     
+    // Important: Reconnect to the server
+    try {
+      // Wait a short time to ensure the previous connection is fully closed
+      setTimeout(() => {
+        console.log("Reinitializing network connection...");
+        if (this.game.network) {
+          this.game.network.init(); // Reconnect to the server
+        }
+      }, 500);
+    } catch (error) {
+      console.error("Error reconnecting to server:", error);
+    }
+    
     console.log('Game restarted');
   }
   
@@ -647,6 +727,71 @@ class UI {
     
     if (pauseMenu) {
       pauseMenu.style.display = 'none';
+    }
+  }
+  
+  /**
+   * Show a loading overlay with a message
+   * @param {string} message - The message to display
+   */
+  showLoading(message = 'Loading...') {
+    if (this.loadingOverlay) {
+      const messageElement = this.loadingOverlay.querySelector('.loading-message');
+      if (messageElement) {
+        messageElement.textContent = message;
+      }
+      this.loadingOverlay.classList.remove('hidden');
+    }
+  }
+  
+  /**
+   * Hide the loading overlay
+   */
+  hideLoading() {
+    if (this.loadingOverlay) {
+      this.loadingOverlay.classList.add('hidden');
+    }
+  }
+  
+  /**
+   * Show an error message
+   * @param {string} message - The error message to display
+   */
+  showError(message) {
+    if (this.errorOverlay) {
+      const messageElement = this.errorOverlay.querySelector('.error-message');
+      if (messageElement) {
+        messageElement.textContent = message;
+      }
+      this.errorOverlay.classList.remove('hidden');
+    } else {
+      // Fallback to use the global error overlay if available
+      const globalErrorMessage = document.getElementById('error-message');
+      const globalErrorOverlay = document.getElementById('error-overlay');
+      
+      if (globalErrorMessage && globalErrorOverlay) {
+        globalErrorMessage.textContent = message;
+        globalErrorOverlay.classList.remove('hidden');
+      } else {
+        // Last resort: alert
+        alert('Error: ' + message);
+      }
+    }
+  }
+  
+  /**
+   * Remove a notification
+   * @param {HTMLElement} notification - The notification element to remove
+   */
+  removeNotification(notification) {
+    if (this.notificationContainer && notification && notification.parentNode === this.notificationContainer) {
+      this.notificationContainer.removeChild(notification);
+      
+      // Find and remove from the notifications array
+      const index = this.notifications.indexOf(notification);
+      if (index !== -1) {
+        this.notifications.splice(index, 1);
+      }
     }
   }
 } 

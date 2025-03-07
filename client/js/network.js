@@ -12,18 +12,23 @@ class Network {
     this.socket = null;
     this.connected = false;
     this.events = {};
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.baseReconnectDelay = 1000; // Start with 1 second delay
     
     // Bind methods
     this.connect = this.connect.bind(this);
     this.disconnect = this.disconnect.bind(this);
     this.on = this.on.bind(this);
     this.emit = this.emit.bind(this);
+    this.reconnect = this.reconnect.bind(this);
   }
   
   /**
    * Initialize the network
    */
   init() {
+    this.reconnectAttempts = 0;
     this.connect();
   }
   
@@ -31,24 +36,74 @@ class Network {
    * Connect to the server
    */
   connect() {
-    // Create socket connection
-    this.socket = io(CONFIG.SERVER_URL);
+    try {
+      // Create socket connection
+      this.socket = io(CONFIG.SERVER_URL);
+      
+      // Set up connection events
+      this.socket.on('connect', () => {
+        console.log('Connected to server');
+        this.connected = true;
+        this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+        
+        // Notify game of successful connection
+        if (this.events['connected']) {
+          this.events['connected']();
+        }
+      });
+      
+      this.socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+        this.connected = false;
+        
+        // Attempt to reconnect
+        this.reconnect();
+        
+        // Notify game of disconnection
+        if (this.events['disconnected']) {
+          this.events['disconnected']();
+        }
+      });
+      
+      this.socket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+        this.connected = false;
+        
+        // Attempt to reconnect
+        this.reconnect();
+      });
+      
+      this.socket.on('error', (error) => {
+        console.error('Socket error:', error);
+      });
+      
+      // Set up game events
+      this.setupEvents();
+    } catch (error) {
+      console.error('Error creating socket connection:', error);
+      this.reconnect();
+    }
+  }
+  
+  /**
+   * Attempt to reconnect with exponential backoff
+   */
+  reconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('Max reconnection attempts reached');
+      if (this.events['connectionFailed']) {
+        this.events['connectionFailed']();
+      }
+      return;
+    }
     
-    // Set up connection events
-    this.socket.on('connect', () => {
-      this.connected = true;
-    });
+    const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
     
-    this.socket.on('disconnect', () => {
-      this.connected = false;
-    });
-    
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
-    });
-    
-    // Set up game events
-    this.setupEvents();
+    setTimeout(() => {
+      this.reconnectAttempts++;
+      this.connect();
+    }, delay);
   }
   
   /**
@@ -57,6 +112,8 @@ class Network {
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();
+      this.socket = null;
+      this.connected = false;
     }
   }
   
@@ -181,32 +238,49 @@ class Network {
    * Join the game
    * @param {string} playerName - The player's name
    * @param {string} characterClass - The character class
+   * @returns {Promise} Resolves when successfully joined, rejects on failure
    */
   joinGame(playerName, characterClass) {
-    if (!this.connected) {
-      console.error("Cannot join game: not connected to server");
-      // Show a user-friendly error message
-      alert("Cannot connect to game server. Please try again later.");
-      return;
-    }
-    
-    if (!playerName || !characterClass) {
-      console.error("Cannot join game: missing player name or character class");
-      return;
-    }
-    
-    console.log(`Joining game as ${playerName} (${characterClass})`);
-    
-    try {
-      this.emit('joinGame', {
-        name: playerName,
-        characterClass: characterClass
-      });
-      console.log("Join request sent to server");
-    } catch (error) {
-      console.error("Error joining game:", error);
-      alert("An error occurred while joining the game. Please try again.");
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.connected) {
+        console.error("Cannot join game: not connected to server");
+        // Show a user-friendly error message
+        reject(new Error("Cannot connect to game server. Please try again later."));
+        return;
+      }
+      
+      if (!playerName || !characterClass) {
+        console.error("Cannot join game: missing player name or character class");
+        reject(new Error("Missing player name or character class"));
+        return;
+      }
+      
+      console.log(`Joining game as ${playerName} (${characterClass})`);
+      
+      try {
+        // Set up a one-time event listener for the join response
+        this.socket.once('gameJoined', (data) => {
+          console.log("Successfully joined game");
+          resolve(data);
+        });
+        
+        this.socket.once('joinError', (error) => {
+          console.error("Error joining game:", error);
+          reject(new Error(error.message || "Failed to join game"));
+        });
+        
+        // Send join request
+        this.emit('joinGame', {
+          name: playerName,
+          characterClass: characterClass
+        });
+        
+        console.log("Join request sent to server");
+      } catch (error) {
+        console.error("Error joining game:", error);
+        reject(new Error("An error occurred while joining the game"));
+      }
+    });
   }
   
   /**

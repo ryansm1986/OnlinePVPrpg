@@ -19,7 +19,7 @@ const CONFIG = {
     mage: 150,
     ranger: 170
   },
-  PLAYER_SIZE: 32,
+  PLAYER_SIZE: 48,
   
   // Combat settings
   ATTACK_RANGE: {
@@ -85,8 +85,8 @@ const CONFIG = {
     MAX_TREES: 120,        // Reduced from 300 to help with memory issues
     MAX_ROCKS: 80,         // Reduced from 180 to help with memory issues
     TREE_SIZE: {
-      min: 20,
-      max: 32
+      min: 60,  // Increased from 20 to 60 (300% of original)
+      max: 96   // Increased from 32 to 96 (300% of original)
     },
     ROCK_SIZE: {
       min: 10,

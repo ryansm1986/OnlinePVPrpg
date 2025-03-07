@@ -804,26 +804,26 @@ class Renderer {
       if (!this.app || !this.app.renderer) {
         console.warn("Cannot create tree texture - renderer not initialized");
         // Return a simple fallback texture
-        return this.createColoredRectTexture(0x008800, 32, 32);
+        return this.createColoredRectTexture(0x008800, 96, 96);
       }
       
       const graphics = new PIXI.Graphics();
       
-      // Tree trunk
+      // Tree trunk - scaled up for larger trees
       graphics.beginFill(0x8B4513); // Brown
-      graphics.drawRect(12, 20, 8, 12);
+      graphics.drawRect(36, 60, 24, 36);
       graphics.endFill();
       
-      // Tree foliage
+      // Tree foliage - scaled up for larger trees
       graphics.beginFill(0x228B22); // Forest Green
-      graphics.drawCircle(16, 12, 16);
+      graphics.drawCircle(48, 36, 48);
       graphics.endFill();
       
-      // Add some detail to the foliage
+      // Add some detail to the foliage - scaled up for larger trees
       graphics.beginFill(0x006400); // Dark Green
-      graphics.drawCircle(10, 8, 5);
-      graphics.drawCircle(22, 10, 6);
-      graphics.drawCircle(16, 4, 5);
+      graphics.drawCircle(30, 24, 15);
+      graphics.drawCircle(66, 30, 18);
+      graphics.drawCircle(48, 12, 15);
       graphics.endFill();
       
       const texture = this.app.renderer.generateTexture(graphics);
@@ -835,7 +835,7 @@ class Renderer {
     } catch (error) {
       console.error("Error creating tree texture:", error);
       // Return a simple fallback texture
-      return this.createColoredRectTexture(0x008800, 32, 32);
+      return this.createColoredRectTexture(0x008800, 96, 96);
     }
   }
   
@@ -1489,7 +1489,7 @@ class Renderer {
         type: 'tree',
         position: { x, y },
         scale: scale,
-        radius: 10 * scale, // Collision radius
+        radius: 20 * scale, // Significantly increased collision radius for trees (from 14 to 20)
         sprite: null // Will be created only when visible
       });
     }
@@ -1611,12 +1611,17 @@ class Renderer {
       
       // Set correct anchor based on type
       if (feature.type === 'tree') {
-        sprite.anchor.set(0.5, 1.0); // Bottom center for trees
+        sprite.anchor.set(0.5, 0.9); // Adjusted anchor for better tree positioning (trunk at bottom)
       } else {
         sprite.anchor.set(0.5, 0.5); // Center for rocks
       }
       
-      sprite.scale.set(feature.scale, feature.scale);
+      // Apply correct scaling based on feature type
+      if (feature.type === 'tree') {
+        sprite.scale.set(feature.scale, feature.scale);
+      } else {
+        sprite.scale.set(feature.scale, feature.scale);
+      }
       
       // Store sprite reference and add to container
       feature.sprite = sprite;

@@ -65,7 +65,6 @@ io.on('connection', (socket) => {
   
   // Handle player inputs
   socket.on('playerInput', (data) => {
-    console.log(`Received input from ${socket.id}: ${JSON.stringify(data)}`);
     handlePlayerInput(socket, game, data);
   });
   
