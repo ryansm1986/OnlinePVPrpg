@@ -40,6 +40,9 @@ class Game {
     this.handlePlayerDeath = this.handlePlayerDeath.bind(this);
     this.handleBossSpawn = this.handleBossSpawn.bind(this);
     this.handleBossKill = this.handleBossKill.bind(this);
+    this.handleProjectileCreated = this.handleProjectileCreated.bind(this);
+    this.handleEffectEvent = this.handleEffectEvent.bind(this);
+    this.handleWorldData = this.handleWorldData.bind(this);
   }
   
   /**
@@ -47,8 +50,6 @@ class Game {
    */
   init() {
     try {
-      console.log("Initializing game...");
-      
       // Create game systems
       this.renderer = new Renderer(this);
       this.network = new Network(this);
@@ -57,12 +58,9 @@ class Game {
       
       // Try to initialize systems
       try {
-        console.log("Initializing renderer...");
         this.renderer.init();
-        console.log("Renderer initialized successfully");
       } catch (renderError) {
         console.error("Failed to initialize normal renderer:", renderError);
-        console.log("Activating fallback renderer");
         this.forceFallbackRendering();
       }
       
@@ -76,8 +74,6 @@ class Game {
       
       // Start loading assets
       this.loadAssets();
-      
-      console.log("Game initialization complete");
     } catch (error) {
       console.error("Critical error during game initialization:", error);
       alert("Failed to initialize game. Check console for details.");
@@ -97,6 +93,9 @@ class Game {
     this.network.on('youDied', this.handlePlayerDeath);
     this.network.on('bossSpawn', this.handleBossSpawn);
     this.network.on('bossKill', this.handleBossKill);
+    this.network.on('projectileCreated', this.handleProjectileCreated);
+    this.network.on('effectEvent', this.handleEffectEvent);
+    this.network.on('worldData', this.handleWorldData);
     
     // UI events
     document.getElementById('start-game').addEventListener('click', () => {
@@ -227,38 +226,6 @@ class Game {
       return;
     }
     
-    // Extra debugging to diagnose issues
-    if (this.debugMode) {
-      // Limit debug logging to once per second
-      const now = Date.now();
-      if (!this.lastDebugTime || now - this.lastDebugTime > 1000) {
-        this.lastDebugTime = now;
-        
-        // Log player state
-        console.log("Game update - Player exists:", !!this.player);
-        if (this.player) {
-          console.log("Player position:", this.player.position.x, this.player.position.y);
-          console.log("Socket ID:", this.network.socket.id);
-        } else {
-          console.log("Waiting for player initialization...");
-          console.log("Network connected:", this.network.connected);
-          console.log("Socket ID:", this.network.socket ? this.network.socket.id : "No socket");
-        }
-        
-        // Log game state
-        console.log("Players in game:", this.players.size);
-        console.log("Monsters in game:", this.monsters.size);
-        
-        // Check renderer status
-        if (this.renderer) {
-          console.log("Renderer initialized!");
-          console.log("PIXI version:", PIXI.VERSION);
-        } else {
-          console.error("Renderer not initialized!");
-        }
-      }
-    }
-    
     // Update game objects
     this.updateGameObjects();
     
@@ -278,22 +245,35 @@ class Game {
     // Update player
     if (this.player) {
       this.player.update(this.deltaTime);
+      
+      // Initialize projectiles array if it doesn't exist
+      if (!this.player.projectiles) {
+        this.player.projectiles = [];
+      }
+      
+      // Update player projectiles
+      this.updateProjectiles(this.player);
     }
     
     // Update other players
-    for (const player of this.players.values()) {
+    this.players.forEach(player => {
       player.update(this.deltaTime);
-    }
+      
+      // Initialize projectiles array if it doesn't exist
+      if (!player.projectiles) {
+        player.projectiles = [];
+      }
+      
+      // Update projectiles for other players
+      this.updateProjectiles(player);
+    });
     
     // Update monsters
-    for (const monster of this.monsters.values()) {
-      monster.update(this.deltaTime);
-    }
-    
-    // Update bosses
-    for (const boss of this.bosses.values()) {
-      boss.update(this.deltaTime);
-    }
+    this.monsters.forEach(monster => {
+      if (monster.update) {
+        monster.update(this.deltaTime);
+      }
+    });
   }
   
   /**
@@ -313,9 +293,6 @@ class Game {
    * @param {Object} data - Game state data
    */
   handleGameState(data) {
-    // Remove the frequent game state logging to prevent console spam
-    // Only log player position updates when in debug mode, and only if player exists
-    
     // Process players
     for (const id in data.players) {
       const playerData = data.players[id];
@@ -332,17 +309,10 @@ class Game {
           // Also add the player to the players map - this ensures it shows in "Players in game" count
           this.players.set(id, this.player);
           
-          // Debug info
-          console.log("Local player created:", this.player);
-          console.log("Starting position:", this.player.position.x, this.player.position.y);
-          
           // Center camera on player
           if (this.renderer) {
             this.renderer.camera.x = this.player.position.x;
             this.renderer.camera.y = this.player.position.y;
-            console.log("Camera centered on player at:", this.player.position.x, this.player.position.y);
-          } else {
-            console.error("Renderer not initialized when player was created!");
           }
         } else {
           // Update existing player (preserve isLocalPlayer flag)
@@ -357,8 +327,6 @@ class Game {
         // Update UI with player stats
         if (this.ui) {
           this.ui.updatePlayerStats();
-        } else {
-          console.warn("UI not initialized when updating player stats");
         }
       } else {
         // Handle other players
@@ -371,10 +339,6 @@ class Game {
           // Create new player
           const player = new Player(playerData);
           this.players.set(id, player);
-          
-          if (this.debugMode) {
-            console.log(`Other player joined: ${player.name} (${id})`);
-          }
         }
       }
     }
@@ -392,10 +356,6 @@ class Game {
         // Create new monster
         const monster = new Monster(monsterData);
         this.monsters.set(id, monster);
-        
-        if (this.debugMode) {
-          console.log(`Monster added: ${monster.type} (${id})`);
-        }
       }
     }
     
@@ -407,28 +367,62 @@ class Game {
         // Create new item
         const item = new Item(itemData);
         this.items.set(id, item);
-        
-        if (this.debugMode) {
-          console.log(`Item added: ${item.name} (${id})`);
-        }
       }
     }
+    
+    // Add projectiles to players if they exist
+    if (data.projectiles) {
+      // Process player projectiles
+      data.projectiles.forEach(projectileData => {
+        // Find the owner player
+        if (this.player && projectileData.ownerId === this.player.id) {
+          if (!this.player.projectiles) {
+            this.player.projectiles = [];
+          }
+          
+          // Check if projectile already exists locally
+          const existingIdx = this.player.projectiles.findIndex(p => p.id === projectileData.id);
+          
+          if (existingIdx === -1) {
+            // Add new projectile
+            this.player.projectiles.push(projectileData);
+          } else {
+            // Update existing projectile
+            this.player.projectiles[existingIdx] = {
+              ...this.player.projectiles[existingIdx],
+              ...projectileData
+            };
+          }
+        } 
+        else if (this.players.has(projectileData.ownerId)) {
+          const player = this.players.get(projectileData.ownerId);
+          
+          if (!player.projectiles) {
+            player.projectiles = [];
+          }
+          
+          // Check if projectile already exists locally
+          const existingIdx = player.projectiles.findIndex(p => p.id === projectileData.id);
+          
+          if (existingIdx === -1) {
+            // Add new projectile
+            player.projectiles.push(projectileData);
+          } else {
+            // Update existing projectile
+            player.projectiles[existingIdx] = {
+              ...player.projectiles[existingIdx],
+              ...projectileData
+            };
+          }
+        }
+      });
+    }
+    
+    // Clean up expired projectiles
+    this.cleanupProjectiles();
     
     // Remove players, monsters, and items that no longer exist
     this.cleanupEntities(data);
-    
-    // Log player position only occasionally (every 3 seconds) to reduce spam
-    if (this.debugMode && this.player) {
-      // Store the last time we logged position
-      this.lastPositionLog = this.lastPositionLog || 0;
-      const now = Date.now();
-      
-      // Only log every 3 seconds
-      if (now - this.lastPositionLog > 3000) {
-        console.log(`Player position: (${this.player.position.x.toFixed(1)}, ${this.player.position.y.toFixed(1)})`);
-        this.lastPositionLog = now;
-      }
-    }
   }
   
   /**
@@ -626,9 +620,6 @@ class Game {
     // Clean up players
     for (const playerId of this.players.keys()) {
       if (!data.players[playerId]) {
-        if (this.debugMode) {
-          console.log(`Removing player: ${playerId}`);
-        }
         this.players.delete(playerId);
       }
     }
@@ -636,9 +627,6 @@ class Game {
     // Clean up monsters
     for (const monsterId of this.monsters.keys()) {
       if (!data.monsters[monsterId]) {
-        if (this.debugMode) {
-          console.log(`Removing monster: ${monsterId}`);
-        }
         this.monsters.delete(monsterId);
       }
     }
@@ -646,9 +634,6 @@ class Game {
     // Clean up items
     for (const itemId of this.items.keys()) {
       if (!data.items[itemId]) {
-        if (this.debugMode) {
-          console.log(`Removing item: ${itemId}`);
-        }
         this.items.delete(itemId);
       }
     }
@@ -660,8 +645,6 @@ class Game {
    */
   forceFallbackRendering() {
     try {
-      console.log("Attempting fallback rendering...");
-      
       // Get the game container
       const container = document.getElementById('game-container');
       if (!container) {
@@ -780,12 +763,150 @@ class Game {
       ctx.fillText('FALLBACK RENDERING ACTIVE - PIXI.js failed', 10, 20);
       ctx.fillText('Use WASD to move', 10, 50);
       
-      console.log("Fallback rendering complete");
-      
       // Schedule next render
       setTimeout(() => this.forceFallbackRendering(), 50);
     } catch (error) {
       console.error("Error in fallback rendering:", error);
     }
+  }
+  
+  /**
+   * Handle projectile creation event
+   * @param {Object} data - Projectile data
+   */
+  handleProjectileCreated(data) {
+    // Safety check for required data
+    if (!data || !data.id || !data.ownerId) {
+      console.error("Invalid projectile data received:", data);
+      return;
+    }
+
+    // Find the owner player
+    let owner = null;
+    
+    if (this.player && data.ownerId === this.player.id) {
+      owner = this.player;
+    } else if (this.players.has(data.ownerId)) {
+      owner = this.players.get(data.ownerId);
+    }
+    
+    if (owner) {
+      // Initialize projectiles array if it doesn't exist
+      if (!owner.projectiles) {
+        owner.projectiles = [];
+      }
+      
+      // Add the new projectile with safe defaults for any missing properties
+      owner.projectiles.push({
+        id: data.id,
+        ownerId: data.ownerId,
+        type: data.type || 'default',
+        position: data.position || { x: owner.position.x, y: owner.position.y },
+        velocity: data.velocity || { x: 0, y: 0 },
+        angle: data.angle || 0,
+        width: data.width || (data.type === 'fireball' ? 24 : 16),
+        height: data.height || (data.type === 'fireball' ? 24 : 8),
+        active: true,
+        createdAt: Date.now(),
+        isSkill: data.isSkill || false
+      });
+    }
+  }
+  
+  /**
+   * Handle special effects like explosions
+   * @param {Object} data - Effect data
+   */
+  handleEffectEvent(data) {
+    if (data.type === 'explosion') {
+      // Show explosion effect
+      this.renderer.showExplosionEffect(data.position, data.radius);
+    }
+  }
+  
+  /**
+   * Update projectiles for a player
+   * @param {Object} player - Player object
+   */
+  updateProjectiles(player) {
+    // Skip if no projectiles
+    if (!player.projectiles || player.projectiles.length === 0) {
+      return;
+    }
+    
+    // Define default world bounds in case world is not defined
+    const worldWidth = this.world ? this.world.width : 1000;
+    const worldHeight = this.world ? this.world.height : 1000;
+    
+    // Update projectile positions
+    for (let i = player.projectiles.length - 1; i >= 0; i--) {
+      const projectile = player.projectiles[i];
+      
+      // Skip inactive projectiles
+      if (!projectile.active) {
+        continue;
+      }
+      
+      // Update position based on velocity
+      projectile.position.x += projectile.velocity.x * this.deltaTime;
+      projectile.position.y += projectile.velocity.y * this.deltaTime;
+      
+      // Check if projectile is out of bounds (world size)
+      if (projectile.position.x < 0 || 
+          projectile.position.x > worldWidth ||
+          projectile.position.y < 0 || 
+          projectile.position.y > worldHeight) {
+        projectile.active = false;
+      }
+      
+      // Check lifespan
+      const age = Date.now() - projectile.createdAt;
+      if (age > 2000) { // 2 second lifespan
+        projectile.active = false;
+        
+        // Check for explosion effect
+        if (projectile.type === 'fireball') {
+          this.renderer.showExplosionEffect(projectile.position, 50);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Clean up expired projectiles
+   */
+  cleanupProjectiles() {
+    // Clean up local player projectiles
+    if (this.player && this.player.projectiles) {
+      this.player.projectiles = this.player.projectiles.filter(p => p.active);
+    }
+    
+    // Clean up other players' projectiles
+    this.players.forEach(player => {
+      if (player.projectiles) {
+        player.projectiles = player.projectiles.filter(p => p.active);
+      }
+    });
+  }
+  
+  /**
+   * Handle world data received from server
+   * @param {Object} data - World data
+   */
+  handleWorldData(data) {
+    // Initialize or update world properties
+    if (!this.world) {
+      this.world = {};
+    }
+    
+    // Update world properties
+    this.world.width = data.width || 1000;
+    this.world.height = data.height || 1000;
+    this.world.biomes = data.biomes || [];
+    this.world.exits = data.exits || [];
+    this.world.landmarks = data.landmarks || [];
+    
+    // Log world initialization
+    console.log("World data received - Width:", this.world.width, "Height:", this.world.height);
   }
 } 

@@ -103,18 +103,20 @@ canvas {
 }
 
 .character-option {
-  width: 250px;
+  flex: 1;
   background-color: #222;
-  border: 2px solid #444;
+  border: 2px solid #333;
   border-radius: 8px;
   padding: 1rem;
+  margin: 0 1rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .character-option:hover {
-  border-color: #4a90e2;
   transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+  border-color: #4a90e2;
 }
 
 .character-option.selected {
@@ -130,25 +132,67 @@ canvas {
 
 .character-preview {
   width: 100%;
-  height: 150px;
+  height: 180px;
   background-color: #333;
   border-radius: 4px;
   margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
   background-position: center;
+  background-size: cover;
   background-repeat: no-repeat;
-  background-size: contain;
+  transition: transform 0.3s ease;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.character-option:hover .character-preview {
+  transform: scale(1.05);
+}
+
+.character-preview::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6));
+  z-index: 1;
+}
+
+.character-preview::before {
+  content: attr(data-class-name);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  z-index: 2;
+}
+
+.character-option:hover .character-preview::before {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .character-preview.warrior {
-  background-image: url('../assets/ui/warrior-preview.png');
+  background-image: url('../assets/warrior.jpg');
 }
 
 .character-preview.mage {
-  background-image: url('../assets/ui/mage-preview.png');
+  background-image: url('../assets/wizard.jpg');
 }
 
 .character-preview.ranger {
-  background-image: url('../assets/ui/ranger-preview.png');
+  background-image: url('../assets/ranger.jpg');
 }
 
 .character-option p {
@@ -327,13 +371,15 @@ canvas {
 
 .minimap {
   position: absolute;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
-  width: 200px;
-  height: 200px;
+  width: 180px;
+  height: 180px;
   background-color: rgba(0, 0, 0, 0.5);
   border-radius: 5px;
   overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 /* Inventory panel */
@@ -503,5 +549,25 @@ canvas {
   100% {
     opacity: 0;
     transform: translateY(-30px);
+  }
+}
+
+.weapon-icon {
+  font-size: 42px;
+  position: relative;
+  z-index: 2;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
   }
 } 

@@ -40,6 +40,9 @@ class Player {
     this.attackCooldown = 0;
     this.attackDuration = 0;
     
+    // Projectile attacks
+    this.projectiles = [];
+    
     // Skills
     this.skillCooldowns = {
       1: 0, // Skill 1
@@ -566,6 +569,143 @@ class Player {
     this.inventory.splice(itemIndex, 1);
     
     return true;
+  }
+  
+  /**
+   * Creates a projectile based on character class
+   * @returns {Object} The projectile object
+   */
+  createProjectile() {
+    // Base projectile properties
+    const projectile = {
+      id: `${this.id}_proj_${Date.now()}`,
+      ownerId: this.id,
+      position: { ...this.position },
+      velocity: { x: 0, y: 0 },
+      damage: this.getBaseDamage(),
+      active: true,
+      lifespan: 2000, // 2 seconds default lifespan
+      createdAt: Date.now()
+    };
+    
+    // Class-specific projectile
+    switch (this.characterClass) {
+      case 'mage':
+        // Fireball projectile
+        projectile.type = 'fireball';
+        projectile.width = 24;
+        projectile.height = 24;
+        projectile.speed = 300; // pixels per second
+        projectile.damage = this.getBaseDamage() * 1.5;
+        projectile.explodes = true;
+        projectile.explosionRadius = 50;
+        break;
+        
+      case 'ranger':
+        // Arrow projectile
+        projectile.type = 'arrow';
+        projectile.width = 16;
+        projectile.height = 8;
+        projectile.speed = 500; // pixels per second
+        projectile.damage = this.getBaseDamage() * 1.2;
+        projectile.piercing = true; // Can go through multiple enemies
+        projectile.maxPierceCount = 2;
+        projectile.pierceCount = 0;
+        break;
+        
+      default:
+        return null; // No projectile for other classes
+    }
+    
+    // Set velocity based on facing direction
+    const speed = projectile.speed * 0.001; // Convert to per-millisecond
+    
+    switch (this.facingDirection) {
+      case 'up':
+        projectile.velocity.y = -speed;
+        projectile.angle = 270; // degrees
+        break;
+      case 'down':
+        projectile.velocity.y = speed;
+        projectile.angle = 90; // degrees
+        break;
+      case 'left':
+        projectile.velocity.x = -speed;
+        projectile.angle = 180; // degrees
+        break;
+      case 'right':
+        projectile.velocity.x = speed;
+        projectile.angle = 0; // degrees
+        break;
+    }
+    
+    return projectile;
+  }
+  
+  /**
+   * Fires a projectile attack
+   * @returns {Object|null} The projectile object or null if class can't create projectiles
+   */
+  fireProjectile() {
+    // Only mage and ranger can fire projectiles
+    if (this.characterClass !== 'mage' && this.characterClass !== 'ranger') {
+      return null;
+    }
+    
+    // Create a new projectile
+    const projectile = this.createProjectile();
+    
+    if (projectile) {
+      // Add to player's projectiles list
+      this.projectiles.push(projectile);
+      
+      // Set attack cooldown
+      this.attackCooldown = this.getAttackCooldown();
+      
+      // Set attacking state
+      this.isAttacking = true;
+      this.attackDirection = this.facingDirection;
+      this.attackDuration = this.getAttackDuration();
+    }
+    
+    return projectile;
+  }
+  
+  /**
+   * Updates all projectiles for this player
+   * @param {number} deltaTime - Time passed since last update in ms
+   * @returns {Array} Array of projectiles that have hit or expired
+   */
+  updateProjectiles(deltaTime) {
+    const expiredProjectiles = [];
+    
+    // Update each projectile position
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const projectile = this.projectiles[i];
+      
+      // Update position based on velocity
+      projectile.position.x += projectile.velocity.x * deltaTime;
+      projectile.position.y += projectile.velocity.y * deltaTime;
+      
+      // Check if projectile has expired
+      const age = Date.now() - projectile.createdAt;
+      if (age > projectile.lifespan) {
+        // Mark for explosion if it's a fireball
+        if (projectile.type === 'fireball' && projectile.explodes) {
+          expiredProjectiles.push({
+            ...projectile,
+            isExplosion: true
+          });
+        } else {
+          expiredProjectiles.push(projectile);
+        }
+        
+        // Remove from active projectiles
+        this.projectiles.splice(i, 1);
+      }
+    }
+    
+    return expiredProjectiles;
   }
   
   /**

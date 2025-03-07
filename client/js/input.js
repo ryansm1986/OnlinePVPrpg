@@ -55,6 +55,9 @@ class Input {
    * @param {KeyboardEvent} event - Key event
    */
   handleKeyDown(event) {
+    // Safety check to ensure event.key exists
+    if (!event || event.key === undefined) return;
+    
     // Store key state
     this.keys[event.key.toLowerCase()] = true;
     
@@ -95,6 +98,9 @@ class Input {
    * @param {KeyboardEvent} event - Key event
    */
   handleKeyUp(event) {
+    // Safety check to ensure event.key exists
+    if (!event || event.key === undefined) return;
+    
     // Check if this was a movement key
     const key = event.key.toLowerCase();
     const wasMovementKey = (key === 'w' || key === 's' || key === 'a' || key === 'd' || 
@@ -117,7 +123,6 @@ class Input {
       // Force immediate stop command
       this.lastMovementTime = 0; // Reset throttle
       this.game.network.sendMovementInput(0, 0);
-      console.log("Sending stop movement command");
     }
   }
   

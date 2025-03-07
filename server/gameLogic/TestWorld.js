@@ -13,6 +13,9 @@ class TestWorld {
     this.items = new Map(); // Map of dropped items by UUID
     this.bosses = new Map(); // Empty for test world
     
+    // Projectiles collection
+    this.projectiles = new Map(); // Map of projectiles by ID
+    
     // Simple world properties
     this.width = 1000;
     this.height = 1000;
@@ -42,25 +45,21 @@ class TestWorld {
   }
   
   spawnTestMonster() {
-    // Create a single monster in the center of the map
     const monsterId = uuidv4();
     const position = {
-      x: this.width / 2 + 50, // 50 pixels to the right of center
+      x: this.width / 2 + 50,
       y: this.height / 2
     };
     
     const monster = new Monster(monsterId, 'wolf', position);
-    monster.health = 50; // Make it easier to kill
+    monster.health = 50;
     monster.maxHealth = 50;
-    monster.aggroRange = 150; // Smaller aggro range for testing
+    monster.aggroRange = 150;
     
-    // Add to monsters map
     this.monsters.set(monsterId, monster);
-    console.log(`Test monster spawned at ${position.x}, ${position.y}`);
   }
   
   addPlayer(socketId, playerData) {
-    // Create player at center of the map
     const position = { x: this.width / 2, y: this.height / 2 };
     
     const player = new Player(
@@ -70,9 +69,7 @@ class TestWorld {
       position
     );
     
-    // Add to players map
     this.players.set(socketId, player);
-    console.log(`Player ${playerData.name} joined as ${playerData.characterClass}`);
     
     return player;
   }
@@ -80,7 +77,6 @@ class TestWorld {
   removePlayer(socketId) {
     if (this.players.has(socketId)) {
       const player = this.players.get(socketId);
-      console.log(`Player ${player.name} left the game`);
       this.players.delete(socketId);
     }
   }
@@ -99,22 +95,46 @@ class TestWorld {
         player.position.x += player.velocity.x * 0.05; // Assume 50ms update rate
         player.position.y += player.velocity.y * 0.05;
         
-        // Boundary checking to keep players in the world
+        // Constrain player to world bounds
         player.position.x = Math.max(0, Math.min(this.width, player.position.x));
         player.position.y = Math.max(0, Math.min(this.height, player.position.y));
       }
-    });
-    
-    // Update monsters
-    this.monsters.forEach(monster => {
-      if (!monster.isDead()) {
-        monster.update(this);
-      } else if (monster.canRespawn()) {
-        monster.respawn();
+      
+      // Decrement cooldowns
+      if (player.attackCooldown > 0) {
+        player.attackCooldown -= 50; // Decrease by update interval
+      }
+      
+      if (player.attackDuration > 0) {
+        player.attackDuration -= 50;
+        if (player.attackDuration <= 0) {
+          player.isAttacking = false;
+          player.attackDirection = null;
+        }
+      }
+      
+      // Update projectiles
+      const expiredProjectiles = player.updateProjectiles(50);
+      
+      // Handle any explosions
+      expiredProjectiles.forEach(projectile => {
+        if (projectile.isExplosion) {
+          this.handleExplosion(projectile);
+        }
+      });
+      
+      // Update skill cooldowns
+      for (const skillId in player.skillCooldowns) {
+        if (player.skillCooldowns[skillId] > 0) {
+          player.skillCooldowns[skillId] -= 50;
+        }
       }
     });
     
-    // Check collisions
+    // Update projectile positions and check collisions
+    this.updateProjectiles();
+    
+    // Check for collisions
     this.checkCollisions();
   }
   
@@ -424,6 +444,175 @@ class TestWorld {
   sendToPlayer(playerId, event, data) {
     // This would use io.to(playerId).emit() in the actual implementation
     // Since we don't have direct access to io here, we'll handle it in the server
+  }
+  
+  /**
+   * Update all projectiles and check for collisions
+   */
+  updateProjectiles() {
+    // Process each player's projectiles
+    this.players.forEach(player => {
+      player.projectiles.forEach(projectile => {
+        // Add to world projectiles map if not already there
+        if (!this.projectiles.has(projectile.id)) {
+          this.projectiles.set(projectile.id, projectile);
+        }
+        
+        // Check for projectile collisions with monsters
+        this.monsters.forEach(monster => {
+          if (this.checkProjectileCollision(projectile, monster)) {
+            // Handle hit
+            this.handleProjectileHit(projectile, monster);
+          }
+        });
+        
+        // Check for projectile collisions with players (PvP would be enabled here)
+        // Uncomment to enable PvP
+        /* 
+        this.players.forEach(otherPlayer => {
+          if (projectile.ownerId !== otherPlayer.id) { // Don't hit self
+            if (this.checkProjectileCollision(projectile, otherPlayer)) {
+              // Handle hit
+              this.handleProjectileHit(projectile, otherPlayer);
+            }
+          }
+        });
+        */
+      });
+    });
+  }
+  
+  /**
+   * Check collision between a projectile and target
+   * @param {Object} projectile - The projectile object
+   * @param {Object} target - The target object
+   * @returns {boolean} True if collision detected
+   */
+  checkProjectileCollision(projectile, target) {
+    // Skip if projectile is not active
+    if (!projectile.active) return false;
+    
+    // Simple rectangle collision
+    return this.rectIntersect(
+      projectile.position.x - projectile.width / 2,
+      projectile.position.y - projectile.height / 2,
+      projectile.width,
+      projectile.height,
+      target.position.x - target.width / 2,
+      target.position.y - target.height / 2,
+      target.width,
+      target.height
+    );
+  }
+  
+  /**
+   * Handle a projectile hit on a target
+   * @param {Object} projectile - The projectile object
+   * @param {Object} target - The target hit
+   */
+  handleProjectileHit(projectile, target) {
+    // Apply damage to target
+    const damage = projectile.damage;
+    target.takeDamage(damage);
+    
+    // Broadcast combat event
+    this.broadcastMessage('combatEvent', {
+      attackerId: projectile.ownerId,
+      targetId: target.id,
+      damage: damage,
+      targetHealth: target.health,
+      targetMaxHealth: target.maxHealth,
+      projectileType: projectile.type
+    });
+    
+    // Handle piercing projectiles
+    if (projectile.piercing) {
+      projectile.pierceCount++;
+      if (projectile.pierceCount >= projectile.maxPierceCount) {
+        projectile.active = false;
+      }
+    } else {
+      // Non-piercing projectiles deactivate on hit
+      projectile.active = false;
+    }
+    
+    // Handle death
+    if (target.health <= 0) {
+      const attacker = this.players.get(projectile.ownerId);
+      if (attacker) {
+        this.handleKill(attacker, target);
+      }
+    }
+    
+    // Handle fireball explosion on impact
+    if (projectile.type === 'fireball' && projectile.explodes) {
+      this.handleExplosion(projectile);
+    }
+  }
+  
+  /**
+   * Handle a fireball explosion
+   * @param {Object} projectile - The exploding projectile
+   */
+  handleExplosion(projectile) {
+    // Get all entities in explosion radius
+    const explosionTargets = [];
+    
+    // Check monsters in explosion radius
+    this.monsters.forEach(monster => {
+      const distance = this.getDistance(projectile.position, monster.position);
+      if (distance <= projectile.explosionRadius) {
+        explosionTargets.push(monster);
+      }
+    });
+    
+    // Apply damage to each target in explosion
+    const owner = this.players.get(projectile.ownerId);
+    if (owner) {
+      explosionTargets.forEach(target => {
+        // Calculate damage (reduced by distance from center)
+        const distance = this.getDistance(projectile.position, target.position);
+        const damageMultiplier = 1 - (distance / projectile.explosionRadius);
+        const damage = Math.floor(projectile.damage * damageMultiplier);
+        
+        // Apply damage
+        target.takeDamage(damage);
+        
+        // Broadcast combat event for explosion damage
+        this.broadcastMessage('combatEvent', {
+          attackerId: projectile.ownerId,
+          targetId: target.id,
+          damage: damage,
+          targetHealth: target.health,
+          targetMaxHealth: target.maxHealth,
+          isExplosion: true
+        });
+        
+        // Handle death
+        if (target.health <= 0) {
+          this.handleKill(owner, target);
+        }
+      });
+    }
+    
+    // Broadcast explosion effect
+    this.broadcastMessage('effectEvent', {
+      type: 'explosion',
+      position: projectile.position,
+      radius: projectile.explosionRadius
+    });
+  }
+  
+  /**
+   * Calculate distance between two points
+   * @param {Object} point1 - First point {x, y}
+   * @param {Object} point2 - Second point {x, y}
+   * @returns {number} Distance between points
+   */
+  getDistance(point1, point2) {
+    const dx = point1.x - point2.x;
+    const dy = point1.y - point2.y;
+    return Math.sqrt(dx * dx + dy * dy);
   }
 }
 

@@ -36,12 +36,10 @@ class Network {
     
     // Set up connection events
     this.socket.on('connect', () => {
-      console.log('Connected to server');
       this.connected = true;
     });
     
     this.socket.on('disconnect', () => {
-      console.log('Disconnected from server');
       this.connected = false;
     });
     
@@ -141,6 +139,20 @@ class Network {
       console.error('Game error:', data.message);
       if (this.events['error']) {
         this.events['error'](data);
+      }
+    });
+    
+    // Projectile created
+    this.socket.on('projectileCreated', (data) => {
+      if (this.events['projectileCreated']) {
+        this.events['projectileCreated'](data);
+      }
+    });
+    
+    // Effect event
+    this.socket.on('effectEvent', (data) => {
+      if (this.events['effectEvent']) {
+        this.events['effectEvent'](data);
       }
     });
   }

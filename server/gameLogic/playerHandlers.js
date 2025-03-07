@@ -66,13 +66,9 @@ function handlePlayerConnection(socket, game) {
  * @param {Object} inputData - Input data from client
  */
 function handlePlayerInput(socket, game, inputData) {
-  // Log all inputs for debugging
-  console.log(`Input from ${socket.id}:`, JSON.stringify(inputData));
-  
   // Get player
   const player = game.players.get(socket.id);
   if (!player) {
-    console.error(`Player not found for socket ${socket.id}`);
     return;
   }
   
@@ -99,7 +95,8 @@ function handlePlayerInput(socket, game, inputData) {
       break;
       
     default:
-      console.warn(`Unknown input type: ${inputData.type}`);
+      // Unknown input type
+      break;
   }
 }
 
@@ -156,13 +153,31 @@ function handleMovementInput(player, game, data) {
 function handleAttackInput(player, game) {
   // Handle basic attack
   if (player.attackCooldown <= 0) {
-    // Set player as attacking
-    player.isAttacking = true;
-    player.attackDirection = player.facingDirection;
-    
-    // Set attack duration and cooldown
-    player.attackDuration = player.getAttackDuration();
-    player.attackCooldown = player.getAttackCooldown();
+    // For mage and ranger, create projectile attacks
+    if (player.characterClass === 'mage' || player.characterClass === 'ranger') {
+      const projectile = player.fireProjectile();
+      
+      if (projectile) {
+        // Broadcast projectile creation
+        game.broadcastMessage('projectileCreated', {
+          id: projectile.id,
+          ownerId: player.id,
+          type: projectile.type,
+          position: projectile.position,
+          velocity: projectile.velocity,
+          angle: projectile.angle
+        });
+      }
+    } else {
+      // For warrior and other melee classes
+      // Set player as attacking
+      player.isAttacking = true;
+      player.attackDirection = player.facingDirection;
+      
+      // Set attack duration and cooldown
+      player.attackDuration = player.getAttackDuration();
+      player.attackCooldown = player.getAttackCooldown();
+    }
   }
 }
 
@@ -189,7 +204,7 @@ function handleSkillInput(player, game, data) {
   } 
   else if (player.characterClass === 'mage') {
     if (skillId === 1) {
-      // Fireball (ranged AoE)
+      // Enhanced fireball (larger and more damage)
       useMageFireball(player, game, data);
     }
   } 
@@ -230,13 +245,32 @@ function useMageFireball(player, game, data) {
   // Set fireball cooldown
   player.skillCooldowns[1] = 8000; // 8 seconds
   
-  // Create fireball projectile
-  const targetX = data.targetX || player.position.x + (player.facingDirection === 'right' ? 100 : (player.facingDirection === 'left' ? -100 : 0));
-  const targetY = data.targetY || player.position.y + (player.facingDirection === 'down' ? 100 : (player.facingDirection === 'up' ? -100 : 0));
+  // Create an enhanced fireball projectile
+  const projectile = player.createProjectile();
   
-  // Fireball would be created and added to the game's projectiles
-  // This is just a placeholder for now
-  console.log(`Mage ${player.name} cast fireball toward (${targetX}, ${targetY})`);
+  if (projectile) {
+    // Enhance the projectile for skill version
+    projectile.damage *= 2; // Double damage
+    projectile.explosionRadius *= 1.5; // 50% larger explosion
+    projectile.width *= 1.5; // 50% larger size
+    projectile.height *= 1.5;
+    
+    // Add to player's projectiles
+    player.projectiles.push(projectile);
+    
+    // Broadcast projectile creation
+    game.broadcastMessage('projectileCreated', {
+      id: projectile.id,
+      ownerId: player.id,
+      type: projectile.type,
+      position: projectile.position,
+      velocity: projectile.velocity,
+      angle: projectile.angle,
+      isSkill: true,
+      width: projectile.width,
+      height: projectile.height
+    });
+  }
 }
 
 /**
@@ -248,9 +282,88 @@ function useRangerMultishot(player, game) {
   // Set multishot cooldown
   player.skillCooldowns[1] = 6000; // 6 seconds
   
-  // Create multiple arrow projectiles
-  // This is a placeholder
-  console.log(`Ranger ${player.name} used multishot`);
+  // Create multiple arrows
+  const arrowCount = 3;
+  const spreadAngle = 15; // degrees between arrows
+  
+  // Store original facing direction
+  const originalDirection = player.facingDirection;
+  
+  // Create center arrow first
+  const centerArrow = player.createProjectile();
+  
+  if (centerArrow) {
+    // Add to player's projectiles
+    player.projectiles.push(centerArrow);
+    
+    // Broadcast projectile creation
+    game.broadcastMessage('projectileCreated', {
+      id: centerArrow.id,
+      ownerId: player.id,
+      type: centerArrow.type,
+      position: centerArrow.position,
+      velocity: centerArrow.velocity,
+      angle: centerArrow.angle,
+      isSkill: true
+    });
+    
+    // Create side arrows with angle spread
+    for (let i = 1; i <= arrowCount / 2; i++) {
+      // Calculate angles for side arrows
+      const leftAngle = centerArrow.angle - (spreadAngle * i);
+      const rightAngle = centerArrow.angle + (spreadAngle * i);
+      
+      // Create left arrow
+      const leftArrow = { ...centerArrow };
+      leftArrow.id = `${player.id}_proj_${Date.now()}_L${i}`;
+      
+      // Calculate velocity based on angle
+      const leftRadians = (leftAngle * Math.PI) / 180;
+      leftArrow.velocity = {
+        x: Math.cos(leftRadians) * centerArrow.speed * 0.001,
+        y: Math.sin(leftRadians) * centerArrow.speed * 0.001
+      };
+      leftArrow.angle = leftAngle;
+      
+      // Create right arrow
+      const rightArrow = { ...centerArrow };
+      rightArrow.id = `${player.id}_proj_${Date.now()}_R${i}`;
+      
+      // Calculate velocity based on angle
+      const rightRadians = (rightAngle * Math.PI) / 180;
+      rightArrow.velocity = {
+        x: Math.cos(rightRadians) * centerArrow.speed * 0.001,
+        y: Math.sin(rightRadians) * centerArrow.speed * 0.001
+      };
+      rightArrow.angle = rightAngle;
+      
+      // Add to player's projectiles
+      player.projectiles.push(leftArrow);
+      player.projectiles.push(rightArrow);
+      
+      // Broadcast left arrow creation
+      game.broadcastMessage('projectileCreated', {
+        id: leftArrow.id,
+        ownerId: player.id,
+        type: leftArrow.type,
+        position: leftArrow.position,
+        velocity: leftArrow.velocity,
+        angle: leftArrow.angle,
+        isSkill: true
+      });
+      
+      // Broadcast right arrow creation
+      game.broadcastMessage('projectileCreated', {
+        id: rightArrow.id,
+        ownerId: player.id,
+        type: rightArrow.type,
+        position: rightArrow.position,
+        velocity: rightArrow.velocity,
+        angle: rightArrow.angle,
+        isSkill: true
+      });
+    }
+  }
 }
 
 /**

@@ -544,6 +544,13 @@ class UI {
       title.style.marginBottom = '2rem';
       pauseMenu.appendChild(title);
       
+      // Create button container for layout
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.flexDirection = 'column';
+      buttonContainer.style.gap = '1rem';
+      buttonContainer.style.minWidth = '200px';
+      
       // Add resume button
       const resumeButton = document.createElement('button');
       resumeButton.textContent = 'Resume';
@@ -554,17 +561,82 @@ class UI {
       resumeButton.style.border = 'none';
       resumeButton.style.borderRadius = '4px';
       resumeButton.style.cursor = 'pointer';
-      resumeButton.style.marginBottom = '1rem';
       resumeButton.addEventListener('click', () => {
         this.game.togglePause();
       });
-      pauseMenu.appendChild(resumeButton);
+      buttonContainer.appendChild(resumeButton);
+      
+      // Add restart button
+      const restartButton = document.createElement('button');
+      restartButton.textContent = 'Restart Game';
+      restartButton.style.padding = '1rem 2rem';
+      restartButton.style.fontSize = '1.2rem';
+      restartButton.style.backgroundColor = '#e67e22'; // Orange
+      restartButton.style.color = 'white';
+      restartButton.style.border = 'none';
+      restartButton.style.borderRadius = '4px';
+      restartButton.style.cursor = 'pointer';
+      restartButton.addEventListener('click', () => {
+        // Show confirmation dialog
+        const confirmRestart = confirm('Are you sure you want to restart the game? All progress will be lost.');
+        if (confirmRestart) {
+          this.restartGame();
+        }
+      });
+      buttonContainer.appendChild(restartButton);
+      
+      pauseMenu.appendChild(buttonContainer);
       
       // Add to game container
       document.getElementById('game-container').appendChild(pauseMenu);
     } else {
       pauseMenu.style.display = 'flex';
     }
+  }
+  
+  /**
+   * Restart the game
+   */
+  restartGame() {
+    // Hide the pause menu
+    this.hidePauseMenu();
+    
+    // Clean up existing game state
+    if (this.game.network && this.game.network.socket) {
+      this.game.network.socket.disconnect();
+    }
+    
+    // Reset game state
+    this.game.isRunning = false;
+    this.game.isPaused = false;
+    this.game.gameStarted = false;
+    
+    // Clear any existing game objects
+    this.game.player = null;
+    this.game.players.clear();
+    this.game.monsters.clear();
+    this.game.bosses.clear();
+    this.game.items.clear();
+    
+    // Reset UI
+    document.getElementById('game-ui').classList.add('hidden');
+    
+    // Show character selection screen again
+    document.getElementById('character-select').classList.remove('hidden');
+    
+    // Reset character selection if needed
+    const selectedClass = document.querySelector('.character-option.selected');
+    if (selectedClass) {
+      selectedClass.classList.remove('selected');
+    }
+    
+    // Reset player name
+    const playerNameInput = document.getElementById('player-name');
+    if (playerNameInput) {
+      playerNameInput.value = '';
+    }
+    
+    console.log('Game restarted');
   }
   
   /**
