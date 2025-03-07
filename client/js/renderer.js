@@ -304,25 +304,12 @@ class Renderer {
     
     // Load textures by category
     this.loadPlayerTextures();
+    this.loadMonsterTextures();
     this.loadProjectileTextures();
     this.loadExplosionTextures();
     
     // Copy the player textures to the main textures object
     this.textures.player = { ...this.playerTextures };
-    
-    // Monster textures
-    this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
-    this.textures.monster.bear = this.createColoredRectTexture(0x8B4513, 48, 48);
-    this.textures.monster.bandit = this.createColoredRectTexture(0x555555, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
-    this.textures.monster.slime = this.createColoredRectTexture(0x00FFFF, 28, 28);
-    this.textures.monster.troll = this.createColoredRectTexture(0x008800, 56, 56);
-    this.textures.monster.snake = this.createColoredRectTexture(0x00FF88, 24, 24);
-    this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
-    this.textures.monster.ghost = this.createColoredRectTexture(0xFFFFFF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
-    this.textures.monster.cultist = this.createColoredRectTexture(0x880000, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
-    this.textures.monster.golem = this.createColoredRectTexture(0x777777, 64, 64);
-    this.textures.monster.griffon = this.createColoredRectTexture(0xFFAA00, 48, 48);
-    this.textures.monster.harpy = this.createColoredRectTexture(0xFF00FF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     
     // Boss textures
     this.textures.boss.dragon = this.createColoredRectTexture(0xFF0000, 96, 96);
@@ -1600,32 +1587,56 @@ class Renderer {
     
     // Draw monsters
     this.game.monsters.forEach(monster => {
-      const monsterGraphics = new PIXI.Graphics();
-      
-      // Draw monsters as red triangles with border
-      monsterGraphics.lineStyle(2, 0xFFFFFF, 1.0);
-      monsterGraphics.beginFill(0xFF0000, 0.8); // Red, semi-transparent
-      
-      // Make monsters larger
-      const monsterSize = 40;
-      monsterGraphics.moveTo(monster.position.x, monster.position.y - monsterSize/2);
-      monsterGraphics.lineTo(monster.position.x + monsterSize/2, monster.position.y + monsterSize/2);
-      monsterGraphics.lineTo(monster.position.x - monsterSize/2, monster.position.y + monsterSize/2);
-      monsterGraphics.closePath();
-      monsterGraphics.endFill();
-      
-      // Add monster type label
-      const nameText = new PIXI.Text(
-        `${monster.type} (${Math.round(monster.position.x)},${Math.round(monster.position.y)})`, 
-        { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF }
-      );
-      nameText.position.set(
-        monster.position.x - nameText.width / 2,
-        monster.position.y - monsterSize/2 - 20
-      );
-      
-      this.entityLayer.addChild(monsterGraphics);
-      this.entityLayer.addChild(nameText);
+      try {
+        let sprite;
+        
+        // Get the appropriate texture for this monster type
+        const texture = this.textures.monster[monster.type.toLowerCase()];
+        
+        if (texture) {
+          // Create sprite with the monster texture
+          sprite = new PIXI.Sprite(texture);
+          
+          // Set the anchor to center
+          sprite.anchor.set(0.5, 0.5);
+          
+          // Position the sprite
+          sprite.position.set(monster.position.x, monster.position.y);
+          
+          // Set size based on monster type
+          const monsterSize = monster.type === 'wolf' ? 48 : 40; // Larger size for wolf
+          sprite.width = monsterSize;
+          sprite.height = monsterSize;
+        } else {
+          // Fallback to simple shape if texture not found
+          sprite = new PIXI.Graphics();
+          sprite.lineStyle(2, 0xFFFFFF, 1.0);
+          sprite.beginFill(0xFF0000, 0.8);
+          
+          const monsterSize = 40;
+          sprite.moveTo(monster.position.x, monster.position.y - monsterSize/2);
+          sprite.lineTo(monster.position.x + monsterSize/2, monster.position.y + monsterSize/2);
+          sprite.lineTo(monster.position.x - monsterSize/2, monster.position.y + monsterSize/2);
+          sprite.closePath();
+          sprite.endFill();
+        }
+        
+        // Add monster type label
+        const nameText = new PIXI.Text(
+          `${monster.type} (${Math.round(monster.position.x)},${Math.round(monster.position.y)})`, 
+          { fontFamily: 'Arial', fontSize: 12, fill: 0xFFFFFF }
+        );
+        nameText.position.set(
+          monster.position.x - nameText.width / 2,
+          monster.position.y - (monster.type === 'wolf' ? 44 : 40) // Adjust label position for wolf
+        );
+        
+        // Add to entity layer
+        this.entityLayer.addChild(sprite);
+        this.entityLayer.addChild(nameText);
+      } catch (error) {
+        console.error(`Error rendering monster ${monster.type}:`, error);
+      }
     });
   }
   
@@ -2193,5 +2204,121 @@ class Renderer {
         }
       });
     }
+  }
+  
+  /**
+   * Show a slash effect for warrior attacks
+   * @param {Object} player - The player entity performing the slash
+   */
+  showWarriorSlashEffect(player) {
+    try {
+      // Safety checks
+      if (!this.app || !this.effectLayer) {
+        console.error("Cannot show warrior slash effect: renderer not fully initialized");
+        return;
+      }
+      
+      // Create slash sprite using the slash texture
+      const slash = new PIXI.Sprite(this.textures.effect.slash);
+      
+      // Set origin to center for proper rotation
+      slash.anchor.set(0.5, 0.5);
+      
+      // Position slash in front of player based on direction
+      const offsetDistance = 40;
+      let offsetX = 0;
+      let offsetY = 0;
+      
+      // Determine direction of slash based on player direction
+      if (player.facingDirection) {
+        switch (player.facingDirection) {
+          case 'up':
+            offsetY = -offsetDistance;
+            slash.rotation = -Math.PI / 2; // -90 degrees
+            break;
+          case 'down':
+            offsetY = offsetDistance;
+            slash.rotation = Math.PI / 2; // 90 degrees
+            break;
+          case 'left':
+            offsetX = -offsetDistance;
+            slash.rotation = Math.PI; // 180 degrees
+            break;
+          case 'right':
+            offsetX = offsetDistance;
+            slash.rotation = 0; // 0 degrees
+            break;
+        }
+      }
+      
+      // Position slash at player position plus offset
+      slash.position.set(player.position.x + offsetX, player.position.y + offsetY);
+      
+      // Set initial scale and alpha
+      slash.scale.set(0.5, 0.5);
+      slash.alpha = 0.9;
+      
+      // Add to effect layer
+      this.effectLayer.addChild(slash);
+      
+      // Animate the slash
+      const animate = () => {
+        // Get current slash props
+        let currentAlpha = slash.alpha;
+        let currentScale = slash.scale.x;
+        
+        // Update alpha (fade out)
+        currentAlpha -= 0.1;
+        slash.alpha = currentAlpha;
+        
+        // Update scale (expand slightly)
+        currentScale += 0.2;
+        slash.scale.set(currentScale, currentScale);
+        
+        // Continue animation or clean up
+        if (currentAlpha > 0) {
+          requestAnimationFrame(animate);
+        } else {
+          this.effectLayer.removeChild(slash);
+        }
+      };
+      
+      // Start animation
+      requestAnimationFrame(animate);
+    } catch (error) {
+      console.error("Error showing warrior slash effect:", error);
+    }
+  }
+
+  /**
+   * Load monster textures
+   */
+  loadMonsterTextures() {
+    // Initialize monster textures if not already done
+    if (!this.textures.monster) {
+      this.textures.monster = {};
+    }
+
+    try {
+      // Load wolf sprite
+      this.textures.monster.wolf = PIXI.Texture.from('/assets/sprites/wolfsprite.png');
+      console.log("Successfully loaded wolf sprite");
+    } catch (error) {
+      console.error("Failed to load wolf sprite, using fallback:", error);
+      this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    }
+
+    // Other monster textures (fallbacks)
+    this.textures.monster.bear = this.createColoredRectTexture(0x8B4513, 48, 48);
+    this.textures.monster.bandit = this.createColoredRectTexture(0x555555, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    this.textures.monster.slime = this.createColoredRectTexture(0x00FFFF, 28, 28);
+    this.textures.monster.troll = this.createColoredRectTexture(0x008800, 56, 56);
+    this.textures.monster.snake = this.createColoredRectTexture(0x00FF88, 24, 24);
+    this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    this.textures.monster.ghost = this.createColoredRectTexture(0xFFFFFF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    this.textures.monster.cultist = this.createColoredRectTexture(0x880000, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    this.textures.monster.golem = this.createColoredRectTexture(0x777777, 64, 64);
+    this.textures.monster.griffon = this.createColoredRectTexture(0xFFAA00, 48, 48);
+    this.textures.monster.harpy = this.createColoredRectTexture(0xFF00FF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
   }
 } 
