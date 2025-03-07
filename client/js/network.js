@@ -179,14 +179,34 @@ class Network {
   
   /**
    * Join the game
-   * @param {string} playerName - Player name
-   * @param {string} characterClass - Character class
+   * @param {string} playerName - The player's name
+   * @param {string} characterClass - The character class
    */
   joinGame(playerName, characterClass) {
-    this.emit('joinGame', {
-      name: playerName,
-      characterClass: characterClass
-    });
+    if (!this.connected) {
+      console.error("Cannot join game: not connected to server");
+      // Show a user-friendly error message
+      alert("Cannot connect to game server. Please try again later.");
+      return;
+    }
+    
+    if (!playerName || !characterClass) {
+      console.error("Cannot join game: missing player name or character class");
+      return;
+    }
+    
+    console.log(`Joining game as ${playerName} (${characterClass})`);
+    
+    try {
+      this.emit('joinGame', {
+        name: playerName,
+        characterClass: characterClass
+      });
+      console.log("Join request sent to server");
+    } catch (error) {
+      console.error("Error joining game:", error);
+      alert("An error occurred while joining the game. Please try again.");
+    }
   }
   
   /**

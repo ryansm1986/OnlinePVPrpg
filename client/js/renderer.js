@@ -8,6 +8,7 @@ class Renderer {
    * @param {Game} game - Reference to the game
    */
   constructor(game) {
+    // Store reference to game
     this.game = game;
     
     // PixiJS application
@@ -47,12 +48,35 @@ class Renderer {
       item: {},
       tile: {},
       effect: {},
-      projectile: {}
+      projectile: {},
+      terrain: {}
     };
     
-    // Bind methods
-    this.render = this.render.bind(this);
-    this.resize = this.resize.bind(this);
+    // Terrain features collection
+    this.terrainFeatures = [];
+    this.terrainInitialized = false;
+    
+    // Initialize player textures to avoid null references
+    this.playerTextures = {};
+    
+    // Safely bind methods
+    if (typeof this.render === 'function') {
+      this.render = this.render.bind(this);
+    } else {
+      // Create default render method if it doesn't exist
+      this.render = function() {
+        console.log("Default render method called - renderer not fully initialized");
+      }.bind(this);
+    }
+    
+    if (typeof this.resize === 'function') {
+      this.resize = this.resize.bind(this);
+    } else {
+      // Create default resize method if it doesn't exist
+      this.resize = function() {
+        console.log("Default resize method called - renderer not fully initialized");
+      }.bind(this);
+    }
   }
   
   /**
@@ -60,46 +84,63 @@ class Renderer {
    */
   init() {
     try {
-      // Make sure PIXI is loaded
-      if (typeof PIXI === 'undefined') {
-        console.error("CRITICAL: PIXI.js is not loaded!");
-        return;
-      }
-      
       // Create PixiJS application
       this.app = new PIXI.Application({
         width: CONFIG.GAME_WIDTH,
         height: CONFIG.GAME_HEIGHT,
         backgroundColor: 0x000000,
-        resolution: window.devicePixelRatio || 1,
-        autoDensity: true
+        antialias: true
       });
       
-      // Get the game container
-      const gameContainer = document.getElementById('game-container');
-      if (!gameContainer) {
-        console.error("CRITICAL: Game container element not found!");
-        return;
-      }
+      // Add canvas to document
+      document.getElementById('game-container').appendChild(this.app.view);
       
-      // Add canvas to DOM
-      gameContainer.prepend(this.app.view);
+      // Initialize playerTextures as an object with fallback values
+      this.playerTextures = {
+        warrior: { 
+          default: this.createColoredRectTexture(0xff0000, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE),
+          down: [this.createColoredRectTexture(0xff0000, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          left: [this.createColoredRectTexture(0xff0000, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          right: [this.createColoredRectTexture(0xff0000, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          up: [this.createColoredRectTexture(0xff0000, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)]
+        },
+        mage: { 
+          default: this.createColoredRectTexture(0x0000ff, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE),
+          down: [this.createColoredRectTexture(0x0000ff, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          left: [this.createColoredRectTexture(0x0000ff, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          right: [this.createColoredRectTexture(0x0000ff, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          up: [this.createColoredRectTexture(0x0000ff, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)]
+        },
+        ranger: { 
+          default: this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE),
+          down: [this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          left: [this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          right: [this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)],
+          up: [this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE)]
+        }
+      };
       
       // Create containers
       this.createContainers();
       
-      // Generate character sprites programmatically as a fallback
-      // We don't need to do this if we're using sprite files, but
-      // keeping it as a fallback option
-      this.generateAndSaveSprites();
-      
       // Load textures
       this.loadTextures();
       
+      // Generate character previews for character selection screen
+      try {
+        console.log("Generating character previews...");
+        this.generateCharacterPreviews();
+      } catch (error) {
+        console.error("Error generating character previews:", error);
+      }
+      
       // Set up resize handler
       window.addEventListener('resize', this.resize);
+      
+      // Set up ticker (animation loop)
+      this.app.ticker.add(this.render);
     } catch (error) {
-      console.error("CRITICAL: Error initializing renderer:", error);
+      console.error("Error initializing renderer:", error);
     }
   }
   
@@ -226,10 +267,17 @@ class Renderer {
     this.textures.item.potion = this.createColoredRectTexture(0xFF00FF, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
     
     // Tile textures
+    this.textures.tile = {};
     this.textures.tile.grass = this.createColoredRectTexture(0x228B22, 32, 32);
     this.textures.tile.water = this.createColoredRectTexture(0x1E90FF, 32, 32);
     this.textures.tile.stone = this.createColoredRectTexture(0x808080, 32, 32);
     this.textures.tile.sand = this.createColoredRectTexture(0xF4A460, 32, 32);
+    
+    // Terrain textures
+    this.textures.terrain = {};
+    this.textures.terrain.tree = this.createTreeTexture();
+    this.textures.terrain.rock = this.createRockTexture();
+    this.textures.terrain.grass = this.createGrassTexture(); // Add grass texture
     
     console.log("Texture loading complete");
   }
@@ -514,11 +562,41 @@ class Renderer {
    * @returns {PIXI.Texture} The created texture
    */
   createColoredRectTexture(color, width, height) {
-    const graphics = new PIXI.Graphics();
-    graphics.beginFill(color);
-    graphics.drawRect(0, 0, width, height);
-    graphics.endFill();
-    return this.app.renderer.generateTexture(graphics);
+    try {
+      // Check if app is initialized
+      if (!this.app || !this.app.renderer) {
+        // If app isn't initialized yet, create a temporary renderer to generate the texture
+        const tempRenderer = PIXI.autoDetectRenderer 
+          ? new PIXI.autoDetectRenderer({width: width, height: height})
+          : new PIXI.Renderer({width: width, height: height});
+        
+        const graphics = new PIXI.Graphics();
+        graphics.beginFill(color);
+        graphics.drawRect(0, 0, width, height);
+        graphics.endFill();
+        
+        return tempRenderer.generateTexture(graphics);
+      }
+      
+      // Normal path when app is initialized
+      const graphics = new PIXI.Graphics();
+      graphics.beginFill(color);
+      graphics.drawRect(0, 0, width, height);
+      graphics.endFill();
+      return this.app.renderer.generateTexture(graphics);
+    } catch (error) {
+      console.error("Error creating colored rectangle texture:", error);
+      
+      // Create and return a minimal texture as fallback (1x1 pixel)
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      ctx.fillRect(0, 0, 1, 1);
+      
+      return PIXI.Texture.from(canvas);
+    }
   }
   
   /**
@@ -570,6 +648,84 @@ class Renderer {
   }
   
   /**
+   * Create a tree texture
+   * @returns {PIXI.Texture} The created texture
+   */
+  createTreeTexture() {
+    const graphics = new PIXI.Graphics();
+    
+    // Tree trunk
+    graphics.beginFill(0x8B4513); // Brown
+    graphics.drawRect(12, 20, 8, 12);
+    graphics.endFill();
+    
+    // Tree foliage
+    graphics.beginFill(0x228B22); // Forest Green
+    graphics.drawCircle(16, 12, 16);
+    graphics.endFill();
+    
+    // Add some detail to the foliage
+    graphics.beginFill(0x006400); // Dark Green
+    graphics.drawCircle(10, 8, 5);
+    graphics.drawCircle(22, 10, 6);
+    graphics.drawCircle(16, 4, 5);
+    graphics.endFill();
+    
+    return this.app.renderer.generateTexture(graphics);
+  }
+  
+  /**
+   * Create a rock texture
+   * @returns {PIXI.Texture} The created texture
+   */
+  createRockTexture() {
+    const graphics = new PIXI.Graphics();
+    
+    // Main rock shape
+    graphics.beginFill(0x808080); // Gray
+    graphics.drawEllipse(16, 20, 16, 12);
+    graphics.endFill();
+    
+    // Add some highlights
+    graphics.beginFill(0xA9A9A9); // Dark Gray
+    graphics.drawEllipse(12, 16, 6, 4);
+    graphics.drawEllipse(20, 18, 4, 3);
+    graphics.endFill();
+    
+    return this.app.renderer.generateTexture(graphics);
+  }
+  
+  /**
+   * Create a grass texture
+   * @returns {PIXI.Texture} The created texture
+   */
+  createGrassTexture() {
+    const graphics = new PIXI.Graphics();
+    
+    // Base grass
+    graphics.beginFill(0x7CFC00); // Lawn Green
+    graphics.drawRect(0, 0, 32, 32);
+    graphics.endFill();
+    
+    // Add some grass blades
+    graphics.lineStyle(1, 0x006400); // Dark Green
+    
+    // Draw several grass blades
+    for (let i = 0; i < 10; i++) {
+      const x = Math.random() * 32;
+      const height = 4 + Math.random() * 8;
+      
+      graphics.moveTo(x, 32);
+      graphics.lineTo(x - 2, 32 - height);
+      
+      graphics.moveTo(x, 32);
+      graphics.lineTo(x + 2, 32 - height);
+    }
+    
+    return this.app.renderer.generateTexture(graphics);
+  }
+  
+  /**
    * Main render method
    */
   render() {
@@ -588,48 +744,47 @@ class Renderer {
       // Check if containers are initialized
       if (!this.worldContainer || !this.groundLayer || !this.entityLayer) {
         console.error("CRITICAL: Containers are not initialized!");
-        this.logRenderState();
+        this.logRenderState ? this.logRenderState() : console.error("logRenderState not available");
         return;
       }
       
-      // Clear all containers
-      this.groundLayer.removeChildren();
+      // Initialize terrain if not already done
+      if (!this.terrainInitialized && typeof this.generateTerrainFeatures === 'function') {
+        this.generateTerrainFeatures();
+        if (typeof this.updateVisibleTerrain === 'function') {
+          this.updateVisibleTerrain();
+        }
+        this.terrainInitialized = true;
+      }
+      
+      // Clear entity layer (but not ground layer which has terrain)
       this.entityLayer.removeChildren();
       this.itemLayer.removeChildren();
       
-      // Force debug mode on to help diagnose the issue
-      this.game.debugMode = true;
-      
-      // Emergency direct rendering approach
-      this.drawEmergencyWorld();
-      
-      // Directly draw the player if it exists
-      if (this.game.player) {
-        this.drawEmergencyPlayer();
+      // Update camera
+      if (typeof this.updateCamera === 'function') {
+        this.updateCamera();
       }
       
-      // Directly draw monsters
-      if (this.game.monsters.size > 0) {
-        this.drawEmergencyMonsters();
+      // Render world (only if not already done)
+      if (typeof this.renderWorld === 'function') {
+        this.renderWorld();
       }
-      
-      // Update camera - direct method
-      this.updateCameraEmergency();
-      
-      // Add diagnostic text to screen
-      this.addDiagnosticOverlay();
-      
-      // Update world
-      this.renderWorld();
       
       // Render entities
-      this.renderEntities();
+      if (typeof this.renderEntities === 'function') {
+        this.renderEntities();
+      }
       
       // Render projectiles
-      this.renderProjectiles();
+      if (typeof this.renderProjectiles === 'function') {
+        this.renderProjectiles();
+      }
       
       // Render UI
-      this.renderUI();
+      if (typeof this.renderUI === 'function') {
+        this.renderUI();
+      }
     } catch (error) {
       console.error("CRITICAL: Error in render method:", error);
     }
@@ -643,21 +798,21 @@ class Renderer {
       // Create a graphics object for the world
       const graphics = new PIXI.Graphics();
       
-      // Draw a solid blue background
-      graphics.beginFill(0x0000AA);
-      graphics.drawRect(0, 0, 1000, 1000);
+      // Use a simple green background for grass instead of blue
+      graphics.beginFill(0x2d801e); // Green for grass
+      graphics.drawRect(0, 0, CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
       graphics.endFill();
       
       // Draw a grid
       graphics.lineStyle(2, 0xFFFFFF, 0.3);
-      for (let i = 0; i <= 1000; i += 100) {
+      for (let i = 0; i <= CONFIG.WORLD_WIDTH; i += 500) {
         // Vertical line
         graphics.moveTo(i, 0);
-        graphics.lineTo(i, 1000);
+        graphics.lineTo(i, CONFIG.WORLD_HEIGHT);
         
         // Horizontal line
         graphics.moveTo(0, i);
-        graphics.lineTo(1000, i);
+        graphics.lineTo(CONFIG.WORLD_WIDTH, i);
         
         // Add coordinate text
         const text = new PIXI.Text(`${i}`, {
@@ -869,6 +1024,20 @@ class Renderer {
       this.camera.x = this.game.player.position.x;
       this.camera.y = this.game.player.position.y;
       
+      // Ensure camera doesn't go out of world bounds
+      const visibleWidth = CONFIG.GAME_WIDTH;
+      const visibleHeight = CONFIG.GAME_HEIGHT;
+      
+      // Calculate camera bounds
+      const minX = visibleWidth / 2;
+      const maxX = CONFIG.WORLD_WIDTH - visibleWidth / 2;
+      const minY = visibleHeight / 2;
+      const maxY = CONFIG.WORLD_HEIGHT - visibleHeight / 2;
+      
+      // Clamp camera position to bounds
+      this.camera.x = Math.max(minX, Math.min(maxX, this.camera.x));
+      this.camera.y = Math.max(minY, Math.min(maxY, this.camera.y));
+      
       // Set world container position directly
       this.worldContainer.position.x = CONFIG.GAME_WIDTH / 2 - this.camera.x;
       this.worldContainer.position.y = CONFIG.GAME_HEIGHT / 2 - this.camera.y;
@@ -960,15 +1129,46 @@ class Renderer {
    */
   updateCamera() {
     if (this.game.player) {
-      // Force center camera on player (disable smooth following for debugging)
-      this.camera.x = this.game.player.position.x;
-      this.camera.y = this.game.player.position.y;
+      // Smooth camera following
+      const targetX = this.game.player.position.x;
+      const targetY = this.game.player.position.y;
       
-      // Directly apply camera transform to world container
+      // Smoothly interpolate camera position
+      this.camera.x += (targetX - this.camera.x) * CONFIG.CAMERA_LERP;
+      this.camera.y += (targetY - this.camera.y) * CONFIG.CAMERA_LERP;
+      
+      // Ensure camera doesn't go out of world bounds
+      // Calculate visible area dimensions
+      const visibleWidth = CONFIG.GAME_WIDTH / this.camera.zoom;
+      const visibleHeight = CONFIG.GAME_HEIGHT / this.camera.zoom;
+      
+      // Calculate camera bounds to keep visible area within world
+      const minX = visibleWidth / 2;
+      const maxX = CONFIG.WORLD_WIDTH - visibleWidth / 2;
+      const minY = visibleHeight / 2;
+      const maxY = CONFIG.WORLD_HEIGHT - visibleHeight / 2;
+      
+      // Clamp camera position to bounds
+      this.camera.x = Math.max(minX, Math.min(maxX, this.camera.x));
+      this.camera.y = Math.max(minY, Math.min(maxY, this.camera.y));
+      
+      // Apply camera transform to world container
       this.worldContainer.position.x = CONFIG.GAME_WIDTH / 2 - this.camera.x * this.camera.zoom;
       this.worldContainer.position.y = CONFIG.GAME_HEIGHT / 2 - this.camera.y * this.camera.zoom;
       this.worldContainer.scale.x = this.camera.zoom;
       this.worldContainer.scale.y = this.camera.zoom;
+      
+      // Update which terrain features are visible - only when camera moves significantly
+      // This prevents updating every frame which could cause performance issues
+      const cameraMoved = 
+        !this.lastCameraPosition || 
+        Math.abs(this.camera.x - this.lastCameraPosition.x) > 50 || 
+        Math.abs(this.camera.y - this.lastCameraPosition.y) > 50;
+      
+      if (cameraMoved) {
+        this.updateVisibleTerrain();
+        this.lastCameraPosition = { x: this.camera.x, y: this.camera.y };
+      }
     }
   }
   
@@ -976,7 +1176,7 @@ class Renderer {
    * Render the game world (ground, terrain, etc.)
    */
   renderWorld() {
-    // In test mode, just draw a simple grid
+    // Only create the grid graphics once
     if (!this.gridGraphics) {
       this.gridGraphics = new PIXI.Graphics();
       this.groundLayer.addChild(this.gridGraphics);
@@ -984,17 +1184,26 @@ class Renderer {
       // Draw grid
       this.gridGraphics.clear();
       
-      // Add a solid background first so we can see the world boundaries
-      this.gridGraphics.beginFill(0x333333); // Dark gray background
-      this.gridGraphics.drawRect(0, 0, 1000, 1000); // Full world size
-      this.gridGraphics.endFill();
+      // Create a tiling grass sprite for the world background (memory efficient)
+      if (!this.grassBackground) {
+        // Use TilingSprite for a memory-efficient repeating background
+        this.grassBackground = new PIXI.TilingSprite(
+          this.textures.terrain.grass,
+          CONFIG.WORLD_WIDTH,
+          CONFIG.WORLD_HEIGHT
+        );
+        this.grassBackground.position.set(0, 0);
+        
+        // Add the grass background as the first child (bottom layer)
+        this.groundLayer.addChildAt(this.grassBackground, 0);
+      }
       
-      // Draw grid lines
-      this.gridGraphics.lineStyle(1, 0x666666, 0.5); // Make grid lines more visible
+      // Add a semi-transparent grid over the grass
+      this.gridGraphics.lineStyle(1, 0x666666, 0.3); // Make grid lines more visible but subtle
       
-      const gridSize = 50;
-      const worldWidth = 1000;
-      const worldHeight = 1000;
+      const gridSize = 100;
+      const worldWidth = CONFIG.WORLD_WIDTH;
+      const worldHeight = CONFIG.WORLD_HEIGHT;
       
       // Draw vertical lines
       for (let x = 0; x <= worldWidth; x += gridSize) {
@@ -1016,9 +1225,9 @@ class Renderer {
       this.gridGraphics.lineStyle(2, 0xFF0000, 1.0);
       this.gridGraphics.drawCircle(worldWidth/2, worldHeight/2, 20);
       
-      // Add coordinate labels at 100-pixel intervals
-      for (let x = 0; x <= worldWidth; x += 100) {
-        for (let y = 0; y <= worldHeight; y += 100) {
+      // Add coordinate labels at 1000-pixel intervals (fewer labels for the larger map)
+      for (let x = 0; x <= worldWidth; x += 1000) {
+        for (let y = 0; y <= worldHeight; y += 1000) {
           const coordText = new PIXI.Text(
             `(${x},${y})`, 
             { fontFamily: 'Arial', fontSize: 10, fill: 0xFFFFFF }
@@ -1027,7 +1236,162 @@ class Renderer {
           this.groundLayer.addChild(coordText);
         }
       }
+      
+      // Generate terrain features if not already done
+      if (!this.terrainInitialized) {
+        this.generateTerrainFeatures();
+        this.terrainInitialized = true;
+      }
     }
+  }
+  
+  /**
+   * Generate terrain features (trees, rocks, etc.)
+   */
+  generateTerrainFeatures() {
+    // Create a container for terrain features if it doesn't exist
+    if (!this.terrainContainer) {
+      this.terrainContainer = new PIXI.Container();
+      this.groundLayer.addChild(this.terrainContainer);
+    } else {
+      // Clear existing terrain to prevent memory leaks
+      this.terrainContainer.removeChildren();
+    }
+    
+    const worldWidth = CONFIG.WORLD_WIDTH;
+    const worldHeight = CONFIG.WORLD_HEIGHT;
+    
+    // Use reduced counts from config to address memory issues
+    const numTrees = CONFIG.TERRAIN.MAX_TREES;
+    const numRocks = CONFIG.TERRAIN.MAX_ROCKS;
+    
+    console.log(`Generating ${numTrees} trees and ${numRocks} rocks (total: ${numTrees + numRocks})`);
+    
+    // Store terrain feature data for collision detection but with minimal memory footprint
+    this.terrainFeatures = [];
+    
+    // Generate positions and properties first without creating sprites yet
+    // This allows us to implement culling and only render visible elements
+    for (let i = 0; i < numTrees; i++) {
+      // Random position within world bounds (keep away from the edges)
+      const x = Math.random() * (worldWidth - 100) + 50;
+      const y = Math.random() * (worldHeight - 100) + 50;
+      
+      // Random size within configured range
+      const sizeRatio = Math.random() * 
+        (CONFIG.TERRAIN.TREE_SIZE.max - CONFIG.TERRAIN.TREE_SIZE.min) + 
+        CONFIG.TERRAIN.TREE_SIZE.min;
+      const scale = sizeRatio / 32; // Normalize by texture size
+      
+      // Store terrain feature data
+      this.terrainFeatures.push({
+        type: 'tree',
+        position: { x, y },
+        scale: scale,
+        radius: 10 * scale, // Collision radius
+        sprite: null // Will be created only when visible
+      });
+    }
+    
+    // Create rocks
+    for (let i = 0; i < numRocks; i++) {
+      // Random position within world bounds (keep away from the edges)
+      const x = Math.random() * (worldWidth - 100) + 50;
+      const y = Math.random() * (worldHeight - 100) + 50;
+      
+      // Random size within configured range
+      const sizeRatio = Math.random() * 
+        (CONFIG.TERRAIN.ROCK_SIZE.max - CONFIG.TERRAIN.ROCK_SIZE.min) + 
+        CONFIG.TERRAIN.ROCK_SIZE.min;
+      const scale = sizeRatio / 32; // Normalize by texture size
+      
+      // Store terrain feature data
+      this.terrainFeatures.push({
+        type: 'rock',
+        position: { x, y },
+        scale: scale,
+        radius: 12 * scale, // Collision radius
+        sprite: null // Will be created only when visible
+      });
+    }
+    
+    // Initial render of visible terrain
+    this.updateVisibleTerrain();
+  }
+  
+  /**
+   * Update which terrain features are visible and render only those
+   * This significantly reduces memory usage by not rendering off-screen elements
+   */
+  updateVisibleTerrain() {
+    // Skip if no camera or terrain features
+    if (!this.camera || !this.terrainFeatures || !this.terrainContainer) return;
+    
+    // Calculate visible area bounds with a larger margin for the bigger map
+    const visibleAreaWidth = CONFIG.GAME_WIDTH / this.camera.zoom;
+    const visibleAreaHeight = CONFIG.GAME_HEIGHT / this.camera.zoom;
+    
+    // Use a larger margin (200px) for the larger map to prevent pop-in
+    const margin = 200;
+    
+    const visibleBounds = {
+      left: this.camera.x - visibleAreaWidth / 2 - margin,
+      right: this.camera.x + visibleAreaWidth / 2 + margin,
+      top: this.camera.y - visibleAreaHeight / 2 - margin,
+      bottom: this.camera.y + visibleAreaHeight / 2 + margin
+    };
+    
+    // Remove sprites for features that are now out of view
+    for (const feature of this.terrainFeatures) {
+      const isVisible = 
+        feature.position.x >= visibleBounds.left && 
+        feature.position.x <= visibleBounds.right &&
+        feature.position.y >= visibleBounds.top && 
+        feature.position.y <= visibleBounds.bottom;
+      
+      if (feature.sprite && !isVisible) {
+        // Remove sprite for off-screen feature to save memory
+        this.terrainContainer.removeChild(feature.sprite);
+        feature.sprite.destroy({children: true, texture: false, baseTexture: false});
+        feature.sprite = null;
+      } else if (!feature.sprite && isVisible) {
+        // Create sprite for newly visible features
+        this.createTerrainSprite(feature);
+      }
+    }
+  }
+  
+  /**
+   * Create a sprite for a terrain feature
+   * @param {Object} feature - The terrain feature data
+   */
+  createTerrainSprite(feature) {
+    // Skip if feature already has a sprite
+    if (feature.sprite) return;
+    
+    let texture;
+    if (feature.type === 'tree') {
+      texture = this.textures.terrain.tree;
+    } else { // rock
+      texture = this.textures.terrain.rock;
+    }
+    
+    // Create sprite
+    const sprite = new PIXI.Sprite(texture);
+    sprite.position.set(feature.position.x, feature.position.y);
+    
+    // Set correct anchor based on type
+    if (feature.type === 'tree') {
+      sprite.anchor.set(0.5, 1.0); // Bottom center for trees
+    } else {
+      sprite.anchor.set(0.5, 0.5); // Center for rocks
+    }
+    
+    sprite.scale.set(feature.scale, feature.scale);
+    
+    // Store sprite reference and add to container
+    feature.sprite = sprite;
+    this.terrainContainer.addChild(sprite);
   }
   
   /**
@@ -1107,21 +1471,44 @@ class Renderer {
    * @param {boolean} isLocalPlayer - Whether this is the local player
    */
   renderPlayerSprite(player, isLocalPlayer) {
-    // Determine character class
+    // Comprehensive null checks to prevent errors
+    if (!player) {
+      console.warn("Cannot render player: player is undefined");
+      return;
+    }
+    
+    if (!player.position || typeof player.position.x !== 'number' || typeof player.position.y !== 'number') {
+      console.warn("Cannot render player: invalid position", player.id, player.position);
+      return;
+    }
+    
+    // Ensure playerTextures exists
+    if (!this.playerTextures) {
+      console.warn("playerTextures not initialized, creating fallback textures");
+      this.playerTextures = {};
+    }
+
     const charClass = player.characterClass || 'warrior';
     
-    try {
-      // Log which player and class we're rendering
-      if (isLocalPlayer) {
-        console.log(`Rendering local player as ${charClass}`);
-      }
+    // Ensure textures for this class exist
+    if (!this.playerTextures[charClass]) {
+      console.warn(`No textures found for class ${charClass}, creating fallback`);
+      const fallbackColor = charClass === 'warrior' ? 0xFF0000 : 
+                           charClass === 'mage' ? 0x0000FF : 0x00FF00;
       
+      const fallbackTexture = this.createColoredRectTexture(fallbackColor, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
+      this.playerTextures[charClass] = { 
+        default: fallbackTexture,
+        down: [fallbackTexture],
+        left: [fallbackTexture],
+        right: [fallbackTexture],
+        up: [fallbackTexture]
+      };
+    }
+    
+    try {
       // Get the textures for this class
       const textures = this.playerTextures[charClass];
-      
-      if (!textures) {
-        throw new Error(`No textures found for class ${charClass}`);
-      }
       
       // Create sprite using appropriate texture
       let sprite;
@@ -1221,285 +1608,177 @@ class Renderer {
   }
   
   /**
-   * Show a cone-shaped slash effect for warrior attacks
-   * @param {Object} player - The player (warrior) performing the attack
+   * Show an explosion effect
+   * @param {Object} position - Position {x, y}
+   * @param {number} radius - Explosion radius
    */
-  showWarriorSlashEffect(player) {
-    // Safety check
-    if (!this.effectLayer || !this.textures.effect.slash) return;
-    
-    // Determine facing direction (use facingDirection if available, otherwise default to 'down')
-    const direction = player.facingDirection || 'down';
-    
-    // Get player position
-    const x = player.position.x;
-    const y = player.position.y;
-    
-    // Calculate position offset based on direction and player size
-    // This positions the slash at the edge of the character model
-    const offsetDistance = CONFIG.PLAYER_SIZE / 2 * 0.7; // Slightly less than half player size
-    let offsetX = 0;
-    let offsetY = 0;
-    
-    switch (direction) {
-      case 'right':
-        offsetX = offsetDistance;
-        break;
-      case 'left':
-        offsetX = -offsetDistance;
-        break;
-      case 'down':
-        offsetY = offsetDistance;
-        break;
-      case 'up':
-        offsetY = -offsetDistance;
-        break;
-    }
-    
-    // Create slash sprite using the slash texture
-    const slashEffect = new PIXI.Sprite(this.textures.effect.slash);
-    
-    // Set the anchor differently for each direction to ensure the slash expands outward
-    switch (direction) {
-      case 'right':
-        slashEffect.anchor.set(0, 0.5); // Anchor at left center
-        break;
-      case 'left':
-        slashEffect.anchor.set(1, 0.5); // Anchor at right center
-        break;
-      case 'down':
-        slashEffect.anchor.set(0.5, 0); // Anchor at top center
-        break;
-      case 'up':
-        slashEffect.anchor.set(0.5, 1); // Anchor at bottom center
-        break;
-    }
-    
-    // Position at player's edge
-    slashEffect.position.set(x + offsetX, y + offsetY);
-    
-    // Set rotation based on direction
-    switch (direction) {
-      case 'right':
-        slashEffect.rotation = 0; // 0 degrees - default orientation
-        break;
-      case 'down':
-        slashEffect.rotation = Math.PI / 2; // 90 degrees
-        break;
-      case 'left':
-        slashEffect.rotation = Math.PI; // 180 degrees
-        break;
-      case 'up':
-        slashEffect.rotation = 3 * Math.PI / 2; // 270 degrees
-        break;
-    }
-    
-    // Size the effect appropriately - start smaller initially
-    const baseScale = CONFIG.PLAYER_SIZE / 50; // Base scale factor
-    const initialScale = baseScale * 0.3; // Start at 30% of final size
-    slashEffect.scale.set(initialScale, initialScale);
-    
-    // Add to effect layer
-    this.effectLayer.addChild(slashEffect);
-    
-    // Animation settings
-    const startTime = Date.now();
-    const duration = 300; // 300ms for the slash animation
-    
-    // Use a simple update function
-    const animate = () => {
-      try {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Scale effect during animation (start smaller, expand quickly)
-        // Use an easing function for more natural expansion
-        const easeOutQuad = 1 - (1 - progress) * (1 - progress);
-        const animScale = baseScale * (initialScale + (1.1 - initialScale) * easeOutQuad);
-        slashEffect.scale.set(animScale, animScale);
-        
-        // Add slight oscillation for a more dynamic effect
-        const wobble = Math.sin(progress * Math.PI * 3) * 0.05;
-        slashEffect.rotation += wobble;
-        
-        // For expanding outward effect, we can also slightly move the slash away from player
-        const outwardDistance = 8 * progress; // Move up to 8 pixels outward
-        switch (direction) {
-          case 'right':
-            slashEffect.position.x = x + offsetX + outwardDistance;
-            break;
-          case 'left':
-            slashEffect.position.x = x + offsetX - outwardDistance;
-            break;
-          case 'down':
-            slashEffect.position.y = y + offsetY + outwardDistance;
-            break;
-          case 'up':
-            slashEffect.position.y = y + offsetY - outwardDistance;
-            break;
-        }
-        
-        // Fade out near the end
-        if (progress > 0.6) {
-          const fadeProgress = (progress - 0.6) / 0.4;
-          slashEffect.alpha = 1 - fadeProgress;
-        }
-        
-        // Remove when animation complete
-        if (progress >= 1) {
-          if (this.effectLayer.children.includes(slashEffect)) {
-            this.effectLayer.removeChild(slashEffect);
-          }
-          return true; // Animation complete
-        }
-        
-        return false; // Animation still running
-      } catch (error) {
-        console.error("Error in slash effect animation:", error);
-        if (this.effectLayer && this.effectLayer.children.includes(slashEffect)) {
-          this.effectLayer.removeChild(slashEffect);
-        }
-        return true; // Stop animation on error
+  showExplosionEffect(position, radius) {
+    try {
+      // Safety checks
+      if (!this.app || !this.effectLayer) {
+        console.error("Cannot show explosion effect: renderer not fully initialized");
+        return;
       }
-    };
-    
-    // Set up animation loop
-    const runAnimation = () => {
-      if (!animate()) {
-        requestAnimationFrame(runAnimation);
-      }
-    };
-    
-    requestAnimationFrame(runAnimation);
-    
-    // Add a small complementary effect - impact particles
-    this.createSlashParticles(x + offsetX, y + offsetY, direction);
+      
+      // Create explosion sprite
+      const explosion = new PIXI.Graphics();
+      
+      // Draw explosion circle
+      explosion.beginFill(0xFF5500, 0.7); // Semi-transparent orange
+      explosion.drawCircle(0, 0, radius);
+      explosion.endFill();
+      
+      // Position explosion
+      explosion.position.set(position.x, position.y);
+      
+      // Add to effect layer
+      this.effectLayer.addChild(explosion);
+      
+      // Animate the explosion
+      const animate = () => {
+        // Get current explosion props
+        let currentAlpha = explosion.alpha;
+        let currentScale = explosion.scale.x;
+        
+        // Update alpha (fade out)
+        currentAlpha -= 0.05;
+        explosion.alpha = currentAlpha;
+        
+        // Update scale (expand)
+        currentScale += 0.1;
+        explosion.scale.set(currentScale, currentScale);
+        
+        // Continue animation or clean up
+        if (currentAlpha > 0) {
+          requestAnimationFrame(animate);
+        } else {
+          this.effectLayer.removeChild(explosion);
+        }
+      };
+      
+      // Start animation
+      requestAnimationFrame(animate);
+    } catch (error) {
+      console.error("Error showing explosion effect:", error);
+    }
   }
   
   /**
-   * Create particles for the warrior slash effect
-   * @param {number} x - X position
-   * @param {number} y - Y position
-   * @param {string} direction - Direction of the slash
+   * Show damage text above a target
+   * @param {number} x - The x position in world coordinates
+   * @param {number} y - The y position in world coordinates
+   * @param {number} damage - The damage amount to display
    */
-  createSlashParticles(x, y, direction) {
-    // Don't create particles if no effect layer
-    if (!this.effectLayer) return;
-    
-    // Create 8-12 particles
-    const particleCount = 8 + Math.floor(Math.random() * 5);
-    
-    // Calculate direction vector
-    let dirX = 0;
-    let dirY = 0;
-    
-    switch (direction) {
-      case 'right':
-        dirX = 1;
-        break;
-      case 'left':
-        dirX = -1;
-        break;
-      case 'down':
-        dirY = 1;
-        break;
-      case 'up':
-        dirY = -1;
-        break;
-    }
-    
-    // Create particles
-    for (let i = 0; i < particleCount; i++) {
-      // Create a particle
-      const particle = new PIXI.Graphics();
+  showDamageText(x, y, damage) {
+    try {
+      if (!this.app || !this.worldContainer) {
+        console.warn("Cannot show damage text: renderer not fully initialized");
+        return;
+      }
       
-      // Random size between 2-5 pixels
-      const size = 2 + Math.random() * 3;
+      // Convert world coordinates to screen coordinates
+      const screenPos = this.worldToScreen(x, y);
       
-      // Random color (yellow to orange)
-      const colorRatio = Math.random();
-      const red = 255;
-      const green = Math.floor(150 + (255 - 150) * colorRatio);
-      const blue = 0;
-      const color = (red << 16) | (green << 8) | blue;
+      // Create a PIXI Text object for the damage
+      const damageText = new PIXI.Text(`${damage}`, {
+        fontFamily: 'Arial',
+        fontSize: 24,
+        fill: '#e74c3c',
+        fontWeight: 'bold',
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center'
+      });
       
-      // Draw the particle
-      particle.beginFill(color, 0.8);
-      particle.drawCircle(0, 0, size);
-      particle.endFill();
+      // Position the text
+      damageText.anchor.set(0.5, 0.5);
+      damageText.position.set(screenPos.x, screenPos.y - 20);
       
-      // Set position with a spread pattern focused in the direction of attack
-      // Calculate a cone of angles in the attack direction
-      const spreadAngle = Math.PI / 3; // 60 degree spread
-      const baseAngle = Math.atan2(dirY, dirX);
-      const particleAngle = baseAngle + (Math.random() * spreadAngle - spreadAngle/2);
+      // Add the text to the UI container (so it's not affected by camera)
+      this.uiContainer.addChild(damageText);
       
-      // Random distance from edge (mostly forward with some variance)
-      const distanceMin = 5;
-      const distanceMax = 25;
-      const distance = distanceMin + Math.random() * (distanceMax - distanceMin);
+      // Animate the text
+      const duration = 1000; // Animation duration in milliseconds
+      const startTime = performance.now();
       
-      // Set position based on angle and distance
-      particle.position.set(
-        x + Math.cos(particleAngle) * distance,
-        y + Math.sin(particleAngle) * distance
-      );
-      
-      // Set velocity - faster at start, spreading outward in the attack direction
-      const speed = 4 + Math.random() * 4; // Slightly faster than before
-      
-      // Add some spread to the velocity direction
-      const velocityAngle = particleAngle + (Math.random() * 0.3 - 0.15);
-      particle.vx = Math.cos(velocityAngle) * speed;
-      particle.vy = Math.sin(velocityAngle) * speed;
-      
-      // Set lifetime - shorter for more intense effect
-      particle.lifetime = 200 + Math.random() * 150;
-      particle.age = 0;
-      
-      // Add to effect layer
-      this.effectLayer.addChild(particle);
-      
-      // Animate the particle
       const animate = () => {
-        if (!particle || !this.effectLayer) return true;
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
         
-        // Update age
-        particle.age += 16.67; // Assume ~60fps
+        // Move the text upward and fade it out
+        damageText.position.y = screenPos.y - 20 - (progress * 30);
+        damageText.alpha = 1 - progress;
         
-        // Update position
-        particle.position.x += particle.vx;
-        particle.position.y += particle.vy;
-        
-        // Apply some drag
-        particle.vx *= 0.95;
-        particle.vy *= 0.95;
-        
-        // Fade out
-        particle.alpha = 1 - (particle.age / particle.lifetime);
-        
-        // Remove when expired
-        if (particle.age >= particle.lifetime) {
-          if (this.effectLayer.children.includes(particle)) {
-            this.effectLayer.removeChild(particle);
-          }
-          return true;
-        }
-        
-        return false;
-      };
-      
-      // Animation loop
-      const runParticleAnimation = () => {
-        if (!animate()) {
-          requestAnimationFrame(runParticleAnimation);
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          // Remove the text when animation completes
+          this.uiContainer.removeChild(damageText);
         }
       };
       
-      requestAnimationFrame(runParticleAnimation);
+      // Start the animation
+      requestAnimationFrame(animate);
+    } catch (error) {
+      console.error("Error showing damage text:", error);
     }
   }
   
+  /**
+   * Play hit animation on a target
+   * @param {Object} target - The target entity
+   */
+  playHitAnimation(target) {
+    try {
+      if (!this.app || !this.effectLayer) {
+        console.warn("Cannot play hit animation: renderer not fully initialized");
+        return;
+      }
+      
+      if (!target || !target.position) {
+        console.warn("Cannot play hit animation: invalid target");
+        return;
+      }
+      
+      // Create a flash effect
+      const flash = new PIXI.Graphics();
+      flash.beginFill(0xFF0000, 0.5);
+      flash.drawCircle(0, 0, 30);
+      flash.endFill();
+      
+      // Position the flash at the target
+      flash.position.set(target.position.x, target.position.y);
+      
+      // Add to effect layer
+      this.effectLayer.addChild(flash);
+      
+      // Animate the flash effect
+      const duration = 300; // Animation duration in milliseconds
+      const startTime = performance.now();
+      
+      const animate = () => {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Scale down and fade out
+        flash.scale.set(1 + progress);
+        flash.alpha = 1 - progress;
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          // Remove the flash when animation completes
+          this.effectLayer.removeChild(flash);
+        }
+      };
+      
+      // Start the animation
+      requestAnimationFrame(animate);
+    } catch (error) {
+      console.error("Error playing hit animation:", error);
+    }
+  }
+
   /**
    * Render UI elements (minimap, etc.)
    */
@@ -1509,11 +1788,14 @@ class Renderer {
       this.updateMinimap();
     }
   }
-  
+
   /**
    * Update the minimap
    */
   updateMinimap() {
+    // Skip if no app available
+    if (!this.app) return;
+    
     // Create minimap container if it doesn't exist
     if (!this.minimapContainer) {
       this.minimapContainer = new PIXI.Container();
@@ -1547,14 +1829,43 @@ class Renderer {
     const minimapGraphics = new PIXI.Graphics();
     this.minimapContent.addChild(minimapGraphics);
     
-    // Determine minimap scale based on world size (assuming 1000x1000 world)
-    const worldSize = 1000;
+    // Determine minimap scale based on world size
+    const worldSize = Math.max(CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
     const minimapSize = 130;
     const minimapScale = minimapSize / worldSize;
     
     // Draw world border
     minimapGraphics.lineStyle(1, 0xFFFFFF, 0.5);
-    minimapGraphics.drawRect(0, 0, worldSize * minimapScale, worldSize * minimapScale);
+    minimapGraphics.drawRect(0, 0, CONFIG.WORLD_WIDTH * minimapScale, CONFIG.WORLD_HEIGHT * minimapScale);
+    
+    // Draw terrain features if available
+    if (this.terrainFeatures && this.terrainFeatures.length > 0) {
+      // Draw trees as small green dots
+      minimapGraphics.beginFill(0x006400, 0.7);
+      for (const feature of this.terrainFeatures) {
+        if (feature.type === 'tree') {
+          minimapGraphics.drawCircle(
+            feature.position.x * minimapScale,
+            feature.position.y * minimapScale,
+            1
+          );
+        }
+      }
+      minimapGraphics.endFill();
+      
+      // Draw rocks as small gray dots
+      minimapGraphics.beginFill(0x808080, 0.7);
+      for (const feature of this.terrainFeatures) {
+        if (feature.type === 'rock') {
+          minimapGraphics.drawCircle(
+            feature.position.x * minimapScale,
+            feature.position.y * minimapScale,
+            0.8
+          );
+        }
+      }
+      minimapGraphics.endFill();
+    }
     
     // Draw player on minimap
     if (this.game.player) {
@@ -1565,321 +1876,47 @@ class Renderer {
         3
       );
       minimapGraphics.endFill();
+      
+      // Draw viewport rectangle showing what's visible in the game window
+      const visibleAreaWidth = CONFIG.GAME_WIDTH / this.camera.zoom;
+      const visibleAreaHeight = CONFIG.GAME_HEIGHT / this.camera.zoom;
+      
+      minimapGraphics.lineStyle(1, 0xFFFF00, 0.8);
+      minimapGraphics.drawRect(
+        (this.camera.x - visibleAreaWidth/2) * minimapScale,
+        (this.camera.y - visibleAreaHeight/2) * minimapScale,
+        visibleAreaWidth * minimapScale,
+        visibleAreaHeight * minimapScale
+      );
     }
     
     // Draw other players
-    this.game.players.forEach(player => {
-      minimapGraphics.beginFill(0x0000FF);
-      minimapGraphics.drawCircle(
-        player.position.x * minimapScale,
-        player.position.y * minimapScale,
-        2
-      );
-      minimapGraphics.endFill();
-    });
+    if (this.game.players) {
+      this.game.players.forEach(player => {
+        minimapGraphics.beginFill(0x0000FF);
+        minimapGraphics.drawCircle(
+          player.position.x * minimapScale,
+          player.position.y * minimapScale,
+          2
+        );
+        minimapGraphics.endFill();
+      });
+    }
     
     // Draw monsters
-    this.game.monsters.forEach(monster => {
-      minimapGraphics.beginFill(0xFF0000);
-      minimapGraphics.drawCircle(
-        monster.position.x * minimapScale,
-        monster.position.y * minimapScale,
-        2
-      );
-      minimapGraphics.endFill();
-    });
-  }
-  
-  /**
-   * Set the local player
-   * @param {Player} player - The local player
-   */
-  setPlayer(player) {
-    // Create player sprite
-    const texture = this.textures.player[player.characterClass] || this.textures.player.warrior;
-    const sprite = new PIXI.Sprite(texture);
-    
-    // Set sprite properties
-    sprite.anchor.set(0.5);
-    sprite.position.x = player.position.x;
-    sprite.position.y = player.position.y;
-    
-    // Add to entity layer
-    this.entityLayer.addChild(sprite);
-    
-    // Store sprite reference
-    this.playerSprites.set(player.id, sprite);
-  }
-  
-  /**
-   * Add a player to the renderer
-   * @param {Player} player - The player to add
-   */
-  addPlayer(player) {
-    // Create player sprite
-    const texture = this.textures.player[player.characterClass] || this.textures.player.warrior;
-    const sprite = new PIXI.Sprite(texture);
-    
-    // Set sprite properties
-    sprite.anchor.set(0.5);
-    sprite.position.x = player.position.x;
-    sprite.position.y = player.position.y;
-    
-    // Add to entity layer
-    this.entityLayer.addChild(sprite);
-    
-    // Store sprite reference
-    this.playerSprites.set(player.id, sprite);
-  }
-  
-  /**
-   * Remove a player from the renderer
-   * @param {Player} player - The player to remove
-   */
-  removePlayer(player) {
-    // Get player sprite
-    const sprite = this.playerSprites.get(player.id);
-    
-    if (sprite) {
-      // Remove from entity layer
-      this.entityLayer.removeChild(sprite);
-      
-      // Remove from sprite map
-      this.playerSprites.delete(player.id);
-    }
-  }
-  
-  /**
-   * Add a monster to the renderer
-   * @param {Monster} monster - The monster to add
-   */
-  addMonster(monster) {
-    // Create monster sprite
-    const texture = this.textures.monster[monster.type] || this.textures.monster.wolf;
-    const sprite = new PIXI.Sprite(texture);
-    
-    // Set sprite properties
-    sprite.anchor.set(0.5);
-    sprite.position.x = monster.position.x;
-    sprite.position.y = monster.position.y;
-    
-    // Add to entity layer
-    this.entityLayer.addChild(sprite);
-    
-    // Store sprite reference
-    this.monsterSprites.set(monster.id, sprite);
-  }
-  
-  /**
-   * Remove a monster from the renderer
-   * @param {Monster} monster - The monster to remove
-   */
-  removeMonster(monster) {
-    // Get monster sprite
-    const sprite = this.monsterSprites.get(monster.id);
-    
-    if (sprite) {
-      // Remove from entity layer
-      this.entityLayer.removeChild(sprite);
-      
-      // Remove from sprite map
-      this.monsterSprites.delete(monster.id);
-    }
-  }
-  
-  /**
-   * Add a boss to the renderer
-   * @param {Boss} boss - The boss to add
-   */
-  addBoss(boss) {
-    // Create boss sprite
-    const texture = this.textures.boss[boss.type] || this.textures.boss.dragon;
-    const sprite = new PIXI.Sprite(texture);
-    
-    // Set sprite properties
-    sprite.anchor.set(0.5);
-    sprite.position.x = boss.position.x;
-    sprite.position.y = boss.position.y;
-    
-    // Add to entity layer
-    this.entityLayer.addChild(sprite);
-    
-    // Store sprite reference
-    this.bossSprites.set(boss.id, sprite);
-  }
-  
-  /**
-   * Remove a boss from the renderer
-   * @param {Boss} boss - The boss to remove
-   */
-  removeBoss(boss) {
-    // Get boss sprite
-    const sprite = this.bossSprites.get(boss.id);
-    
-    if (sprite) {
-      // Remove from entity layer
-      this.entityLayer.removeChild(sprite);
-      
-      // Remove from sprite map
-      this.bossSprites.delete(boss.id);
-    }
-  }
-  
-  /**
-   * Add an item to the renderer
-   * @param {Item} item - The item to add
-   */
-  addItem(item) {
-    // Create item sprite
-    const texture = this.textures.item[item.type] || this.textures.item.weapon;
-    const sprite = new PIXI.Sprite(texture);
-    
-    // Set sprite properties
-    sprite.anchor.set(0.5);
-    sprite.position.x = item.position.x;
-    sprite.position.y = item.position.y;
-    
-    // Tint based on rarity
-    if (item.rarity === 'rare') {
-      sprite.tint = 0x4169E1; // Royal blue
-    } else if (item.rarity === 'legendary') {
-      sprite.tint = 0xFFD700; // Gold
-    }
-    
-    // Add to item layer
-    this.itemLayer.addChild(sprite);
-    
-    // Store sprite reference
-    this.itemSprites.set(item.id, sprite);
-  }
-  
-  /**
-   * Remove an item from the renderer
-   * @param {Item} item - The item to remove
-   */
-  removeItem(item) {
-    // Get item sprite
-    const sprite = this.itemSprites.get(item.id);
-    
-    if (sprite) {
-      // Remove from item layer
-      this.itemLayer.removeChild(sprite);
-      
-      // Remove from sprite map
-      this.itemSprites.delete(item.id);
-    }
-  }
-  
-  /**
-   * Show damage text
-   * @param {number} x - X position
-   * @param {number} y - Y position
-   * @param {number} damage - Damage amount
-   */
-  showDamageText(x, y, damage) {
-    try {
-      // Safety checks
-      if (!this.app || !this.app.ticker || !this.effectLayer) {
-        console.error("Cannot show damage text: renderer not fully initialized");
-        return;
-      }
-      
-      // Create damage text
-      const damageText = new PIXI.Text(damage.toString(), {
-        fontFamily: 'Arial',
-        fontSize: 16,
-        fill: 0xFF0000,
-        align: 'center',
-        stroke: 0x000000,
-        strokeThickness: 4
+    if (this.game.monsters) {
+      this.game.monsters.forEach(monster => {
+        minimapGraphics.beginFill(0xFF0000);
+        minimapGraphics.drawCircle(
+          monster.position.x * minimapScale,
+          monster.position.y * minimapScale,
+          2
+        );
+        minimapGraphics.endFill();
       });
-      
-      // Set text properties
-      damageText.anchor.set(0.5);
-      damageText.position.x = x;
-      damageText.position.y = y - 20;
-      
-      // Add to effect layer
-      this.effectLayer.addChild(damageText);
-      
-      // Animate and remove using a simpler approach
-      const startY = damageText.position.y;
-      const startTime = Date.now();
-      const duration = 1000; // 1 second animation
-      
-      // Use a simple update function
-      const animate = () => {
-        try {
-          const elapsed = Date.now() - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          // Move up
-          damageText.position.y = startY - progress * 30;
-          
-          // Fade out
-          damageText.alpha = 1 - progress;
-          
-          // Remove when animation complete
-          if (progress >= 1) {
-            if (this.effectLayer.children.includes(damageText)) {
-              this.effectLayer.removeChild(damageText);
-            }
-            return true; // Animation complete
-          }
-          return false; // Animation still running
-        } catch (error) {
-          console.error("Error in damage text animation:", error);
-          if (this.effectLayer && this.effectLayer.children.includes(damageText)) {
-            this.effectLayer.removeChild(damageText);
-          }
-          return true; // Stop animation on error
-        }
-      };
-      
-      // Set up a simple animation loop using requestAnimationFrame instead of ticker
-      const runAnimation = () => {
-        if (!animate()) {
-          requestAnimationFrame(runAnimation);
-        }
-      };
-      
-      requestAnimationFrame(runAnimation);
-    } catch (error) {
-      console.error("Error showing damage text:", error);
     }
   }
-  
-  /**
-   * Play hit animation
-   * @param {Object} target - The target entity
-   */
-  playHitAnimation(target) {
-    // Get target sprite
-    let sprite = null;
-    
-    if (target.type === 'player') {
-      if (target.isLocalPlayer) {
-        sprite = this.playerSprites.get(target.id);
-      } else {
-        sprite = this.playerSprites.get(target.id);
-      }
-    } else if (target.type === 'monster') {
-      sprite = this.monsterSprites.get(target.id);
-    } else if (target.type === 'boss') {
-      sprite = this.bossSprites.get(target.id);
-    }
-    
-    if (sprite) {
-      // Flash red
-      sprite.tint = 0xFF0000;
-      
-      // Reset after 100ms
-      setTimeout(() => {
-        sprite.tint = 0xFFFFFF;
-      }, 100);
-    }
-  }
-  
+
   /**
    * Convert screen coordinates to world coordinates
    * @param {number} screenX - Screen X coordinate
@@ -1887,11 +1924,19 @@ class Renderer {
    * @returns {Object} World coordinates {x, y}
    */
   screenToWorld(screenX, screenY) {
-    const worldX = (screenX - this.worldContainer.position.x) / this.camera.zoom;
-    const worldY = (screenY - this.worldContainer.position.y) / this.camera.zoom;
+    // Make sure we have initialized containers first
+    if (!this.worldContainer) {
+      console.warn("Cannot convert screen to world coordinates: worldContainer not initialized");
+      return { x: 0, y: 0 };
+    }
+    
+    // Get world position by applying the inverse of the camera transform
+    const worldX = (screenX - CONFIG.GAME_WIDTH / 2) / this.camera.zoom + this.camera.x;
+    const worldY = (screenY - CONFIG.GAME_HEIGHT / 2) / this.camera.zoom + this.camera.y;
+    
     return { x: worldX, y: worldY };
   }
-  
+
   /**
    * Convert world coordinates to screen coordinates
    * @param {number} worldX - World X coordinate
@@ -1899,90 +1944,78 @@ class Renderer {
    * @returns {Object} Screen coordinates {x, y}
    */
   worldToScreen(worldX, worldY) {
+    // Make sure we have initialized containers first
+    if (!this.worldContainer) {
+      console.warn("Cannot convert world to screen coordinates: worldContainer not initialized");
+      return { x: 0, y: 0 };
+    }
+    
+    // Apply camera transform to convert world coordinates to screen coordinates
     const screenX = (worldX - this.camera.x) * this.camera.zoom + CONFIG.GAME_WIDTH / 2;
     const screenY = (worldY - this.camera.y) * this.camera.zoom + CONFIG.GAME_HEIGHT / 2;
     
     return { x: screenX, y: screenY };
   }
-  
-  /**
-   * Handle window resize
-   */
-  resize() {
-    // Update config
-    CONFIG.GAME_WIDTH = window.innerWidth;
-    CONFIG.GAME_HEIGHT = window.innerHeight;
-    
-    // Resize renderer
-    this.app.renderer.resize(CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT);
-  }
-  
-  /**
-   * Render debug info on screen
-   */
-  renderDebugInfo() {
-    // Only render if debug mode is on
-    if (!this.game.debugMode) {
-      return;
-    }
-    
-    try {
-      // Debug graphics
-      const debugGraphics = new PIXI.Graphics();
-      
-      // Draw FPS counter
-      const fps = Math.round(this.app.ticker.FPS);
-      const fpsText = new PIXI.Text(`FPS: ${fps}`, {
-        fontFamily: 'Arial',
-        fontSize: 12,
-        fill: 0xFFFFFF
-      });
-      fpsText.position.set(10, 10);
-      
-      // Draw player coordinates if player exists
-      if (this.game.player) {
-        const x = Math.round(this.game.player.position.x);
-        const y = Math.round(this.game.player.position.y);
-        
-        const posText = new PIXI.Text(`Position: (${x}, ${y})`, {
-          fontFamily: 'Arial',
-          fontSize: 12,
-          fill: 0xFFFFFF
-        });
-        posText.position.set(10, 30);
-        
-        this.debugContainer.addChild(posText);
-      }
-      
-      // Draw entity counts
-      const countText = new PIXI.Text(
-        `Players: ${this.game.players.size} | Monsters: ${this.game.monsters.size}`, 
-        {
-          fontFamily: 'Arial',
-          fontSize: 12,
-          fill: 0xFFFFFF
-        }
-      );
-      countText.position.set(10, 50);
-      
-      this.debugContainer.addChild(fpsText);
-      this.debugContainer.addChild(countText);
-    } catch (error) {
-      console.error("Failed to render debug info:", error);
-    }
-  }
-  
+
   /**
    * Render all projectiles
    */
   renderProjectiles() {
     // Clear projectile layer
+    if (!this.projectileLayer) {
+      console.warn("No projectile layer initialized");
+      return;
+    }
+    
     this.projectileLayer.removeChildren();
+    
+    // Helper function to render a single projectile
+    const renderSingleProjectile = (projectile) => {
+      if (!projectile || !projectile.active || !projectile.position) return;
+      
+      // Create sprite based on projectile type
+      let sprite;
+      
+      if (projectile.type === 'fireball') {
+        sprite = new PIXI.Sprite(this.textures.projectile.fireball || this.createFireballTexture());
+        
+        // Add rotation for fireballs
+        sprite.rotation = Date.now() * 0.005;
+      } 
+      else if (projectile.type === 'arrow') {
+        sprite = new PIXI.Sprite(this.textures.projectile.arrow || this.createArrowTexture());
+        
+        // Set arrow rotation based on angle
+        sprite.rotation = ((projectile.angle || 0) * Math.PI) / 180;
+      }
+      else {
+        // Default projectile if type not recognized
+        sprite = new PIXI.Graphics();
+        sprite.beginFill(0xFFFF00);
+        sprite.drawRect(0, 0, 16, 8);
+        sprite.endFill();
+      }
+      
+      // Set position
+      sprite.position.set(projectile.position.x, projectile.position.y);
+      
+      // Set anchor to center
+      sprite.anchor.set(0.5, 0.5);
+      
+      // Set custom size if specified
+      if (projectile.width && projectile.height) {
+        sprite.width = projectile.width;
+        sprite.height = projectile.height;
+      }
+      
+      // Add to projectile layer
+      this.projectileLayer.addChild(sprite);
+    };
     
     // Render all projectiles
     if (this.game.player && this.game.player.projectiles) {
       this.game.player.projectiles.forEach(projectile => {
-        this.renderProjectile(projectile);
+        renderSingleProjectile(projectile);
       });
     }
     
@@ -1991,487 +2024,10 @@ class Renderer {
       this.game.players.forEach(player => {
         if (player && player.projectiles) {
           player.projectiles.forEach(projectile => {
-            this.renderProjectile(projectile);
+            renderSingleProjectile(projectile);
           });
         }
       });
     }
-  }
-  
-  /**
-   * Render a single projectile
-   * @param {Object} projectile - The projectile to render
-   */
-  renderProjectile(projectile) {
-    // Safety checks for required properties
-    if (!projectile || !projectile.active || !projectile.position) return;
-    
-    // Create sprite based on projectile type
-    let sprite;
-    
-    if (projectile.type === 'fireball') {
-      sprite = new PIXI.Sprite(this.textures.projectile.fireball);
-      
-      // Only add glow filter if it exists in PIXI
-      try {
-        if (PIXI.filters && PIXI.filters.GlowFilter) {
-          const glowFilter = new PIXI.filters.GlowFilter({
-            distance: 8,
-            outerStrength: 2,
-            innerStrength: 1,
-            color: 0xFF8000,
-            quality: 0.5
-          });
-          
-          sprite.filters = [glowFilter];
-        } else {
-          // Fallback: create a simple pulsing effect instead
-          const pulseTime = Date.now() % 1000 / 1000;
-          const scale = 1 + 0.2 * Math.sin(pulseTime * Math.PI * 2);
-          sprite.scale.set(scale, scale);
-        }
-      } catch (error) {
-        console.error("Error applying filter to fireball:", error);
-      }
-      
-      // Add random rotation for fireballs
-      sprite.rotation = Date.now() * 0.01;
-    } 
-    else if (projectile.type === 'arrow') {
-      sprite = new PIXI.Sprite(this.textures.projectile.arrow);
-      
-      // Set arrow rotation based on angle
-      sprite.rotation = ((projectile.angle || 0) * Math.PI) / 180;
-    }
-    else {
-      // Default projectile if type not recognized
-      sprite = new PIXI.Graphics();
-      sprite.beginFill(0xFFFF00);
-      sprite.drawRect(0, 0, 16, 8);
-      sprite.endFill();
-    }
-    
-    // Set position
-    sprite.position.set(projectile.position.x, projectile.position.y);
-    
-    // Set anchor to center
-    sprite.anchor.set(0.5, 0.5);
-    
-    // Set custom size if specified
-    if (projectile.width && projectile.height) {
-      sprite.width = projectile.width;
-      sprite.height = projectile.height;
-    }
-    
-    // Add to projectile layer
-    this.projectileLayer.addChild(sprite);
-  }
-  
-  /**
-   * Show an explosion effect
-   * @param {Object} position - Position {x, y}
-   * @param {number} radius - Explosion radius
-   */
-  showExplosionEffect(position, radius) {
-    try {
-      // Safety checks
-      if (!this.app || !this.effectLayer) {
-        console.error("Cannot show explosion effect: renderer not fully initialized");
-        return;
-      }
-      
-      // Create explosion sprite
-      const explosion = new PIXI.Graphics();
-      
-      // Draw explosion circle
-      explosion.beginFill(0xFF5500, 0.7); // Semi-transparent orange
-      explosion.drawCircle(0, 0, radius);
-      explosion.endFill();
-      
-      // Draw inner circle
-      explosion.beginFill(0xFFFF00, 0.9); // More opaque yellow
-      explosion.drawCircle(0, 0, radius * 0.6);
-      explosion.endFill();
-      
-      // Position at center
-      explosion.position.set(position.x, position.y);
-      
-      // Add to effect layer
-      this.effectLayer.addChild(explosion);
-      
-      // Animation settings
-      const startTime = Date.now();
-      const expandDuration = 200; // ms
-      const fadeDuration = 300; // ms
-      const totalDuration = expandDuration + fadeDuration;
-      
-      // Use a simple update function with requestAnimationFrame
-      const animate = () => {
-        try {
-          const elapsed = Date.now() - startTime;
-          
-          // Check if animation is done
-          if (elapsed >= totalDuration) {
-            if (this.effectLayer.children.includes(explosion)) {
-              this.effectLayer.removeChild(explosion);
-            }
-            return true; // Animation complete
-          }
-          
-          // Expand phase
-          if (elapsed < expandDuration) {
-            const scale = 0.2 + (elapsed / expandDuration) * 0.8;
-            explosion.scale.set(scale);
-          } 
-          // Fade phase
-          else {
-            const fadeTime = elapsed - expandDuration;
-            const fadeProgress = fadeTime / fadeDuration;
-            explosion.alpha = 1 - fadeProgress;
-          }
-          
-          return false; // Animation still running
-        } catch (error) {
-          console.error("Error in explosion animation:", error);
-          if (this.effectLayer && this.effectLayer.children.includes(explosion)) {
-            this.effectLayer.removeChild(explosion);
-          }
-          return true; // Stop animation on error
-        }
-      };
-      
-      // Set up a simple animation loop using requestAnimationFrame instead of ticker
-      const runAnimation = () => {
-        if (!animate()) {
-          requestAnimationFrame(runAnimation);
-        }
-      };
-      
-      requestAnimationFrame(runAnimation);
-    } catch (error) {
-      console.error("Error showing explosion effect:", error);
-    }
-  }
-  
-  /**
-   * Utility method to generate character preview textures for use on the character selection screen
-   * This is a workaround for the missing preview images
-   */
-  generateCharacterPreviews() {
-    try {
-      if (!this.app || !this.app.renderer) {
-        console.error("Cannot generate character previews: renderer not initialized");
-        return;
-      }
-      
-      // Create warrior preview
-      const warriorPreview = this.createCharacterPreview(0xFF0000, '⚔️', 'WARRIOR');
-      // Create mage preview
-      const magePreview = this.createCharacterPreview(0x0000FF, '🔮', 'MAGE');
-      // Create ranger preview
-      const rangerPreview = this.createCharacterPreview(0x00FF00, '🏹', 'RANGER');
-      
-      // Only console log in this method since this is just informational
-      console.log("Character preview textures generated");
-      console.log("Please create the following files manually:");
-      console.log("- client/assets/ui/warrior-preview.png");
-      console.log("- client/assets/ui/mage-preview.png");
-      console.log("- client/assets/ui/ranger-preview.png");
-    } catch (error) {
-      console.error("Error generating character previews:", error);
-    }
-  }
-  
-  /**
-   * Create a character preview texture with class-specific styling
-   * @param {number} color - Base color for the character
-   * @param {string} symbol - Unicode symbol to represent the class
-   * @param {string} label - Class name to display
-   * @returns {PIXI.Texture} The created texture
-   */
-  createCharacterPreview(color, symbol, label) {
-    // Create graphics object
-    const graphics = new PIXI.Graphics();
-    const width = 300;
-    const height = 200;
-    
-    // Draw background
-    graphics.beginFill(0x333333);
-    graphics.drawRect(0, 0, width, height);
-    graphics.endFill();
-    
-    // Draw character silhouette
-    graphics.beginFill(color, 0.8);
-    graphics.drawCircle(width/2, height/2 - 20, 40);  // Head
-    graphics.drawRect(width/2 - 30, height/2 + 20, 60, 80);  // Body
-    graphics.endFill();
-    
-    // Create text for label
-    const text = new PIXI.Text(label, {
-      fontFamily: 'Arial',
-      fontSize: 24,
-      fill: 0xFFFFFF,
-      align: 'center'
-    });
-    text.anchor.set(0.5, 0.5);
-    text.position.set(width/2, height - 30);
-    
-    // Create container for the preview
-    const container = new PIXI.Container();
-    container.addChild(graphics);
-    container.addChild(text);
-    
-    // Generate texture
-    return this.app.renderer.generateTexture(container);
-  }
-
-  /**
-   * Generate character sprites for use in the game.
-   * This is a utility method to create sprite images that can be saved.
-   */
-  generateCharacterSprites() {
-    try {
-      // Create warrior sprite
-      const warriorSprite = this.createWarriorSprite();
-      const mageSprite = this.createMageSprite();
-      const rangerSprite = this.createRangerSprite();
-      
-      // Log instructions for the user
-      console.log("Character sprites generated!");
-      console.log("To use them in-game, save these images as:");
-      console.log("- client/assets/warriorsprite.png");
-      console.log("- client/assets/magesprite.png");
-      console.log("- client/assets/rangersprite.png");
-      
-      // Image URLs for download are available in the console
-      if (warriorSprite) {
-        console.log("Warrior sprite URL:", warriorSprite.canvas.toDataURL());
-      }
-      if (mageSprite) {
-        console.log("Mage sprite URL:", mageSprite.canvas.toDataURL());
-      }
-      if (rangerSprite) {
-        console.log("Ranger sprite URL:", rangerSprite.canvas.toDataURL());
-      }
-    } catch (error) {
-      console.error("Error generating character sprites:", error);
-    }
-  }
-
-  /**
-   * Create a warrior sprite
-   * @returns {PIXI.RenderTexture} The warrior sprite texture
-   */
-  createWarriorSprite() {
-    // Create a container for the warrior sprite
-    const container = new PIXI.Container();
-    
-    // Create the body
-    const body = new PIXI.Graphics();
-    body.beginFill(0x8B0000); // Dark red
-    body.drawRect(-20, -15, 40, 50); // Body
-    body.endFill();
-    
-    // Create the head
-    const head = new PIXI.Graphics();
-    head.beginFill(0xE0AC69); // Skin tone
-    head.drawCircle(0, -25, 15); // Head
-    head.endFill();
-    
-    // Create helmet
-    const helmet = new PIXI.Graphics();
-    helmet.beginFill(0x888888); // Metal
-    helmet.drawCircle(0, -25, 17); // Outer helmet
-    helmet.endFill();
-    helmet.beginFill(0xE0AC69); // Skin tone
-    helmet.drawCircle(0, -25, 15); // Cut out inner circle
-    helmet.endFill();
-    
-    // Draw helmet details
-    helmet.lineStyle(3, 0x888888, 1);
-    helmet.moveTo(-15, -37);
-    helmet.lineTo(15, -37);
-    helmet.moveTo(0, -42);
-    helmet.lineTo(0, -25);
-    
-    // Create weapon
-    const weapon = new PIXI.Graphics();
-    weapon.beginFill(0x8B4513); // Brown handle
-    weapon.drawRect(22, -10, 5, 40); // Handle
-    weapon.endFill();
-    weapon.beginFill(0xCCCCCC); // Silver blade
-    weapon.drawRect(27, -30, 8, 60); // Blade
-    weapon.endFill();
-    
-    // Create shield
-    const shield = new PIXI.Graphics();
-    shield.beginFill(0x964B00); // Brown shield
-    shield.drawRoundedRect(-32, -15, 20, 40, 5); // Shield
-    shield.endFill();
-    shield.lineStyle(2, 0xCCCCCC, 1);
-    shield.drawRoundedRect(-30, -13, 16, 36, 5); // Shield decoration
-    
-    // Add all parts to the container
-    container.addChild(body, helmet, head, weapon, shield);
-    
-    // Create and return texture
-    return this.app.renderer.generateTexture(container, {
-      resolution: 1,
-      region: new PIXI.Rectangle(-40, -50, 80, 100)
-    });
-  }
-
-  /**
-   * Create a mage sprite
-   * @returns {PIXI.RenderTexture} The mage sprite texture
-   */
-  createMageSprite() {
-    // Create a container for the mage sprite
-    const container = new PIXI.Container();
-    
-    // Create the body (robe)
-    const body = new PIXI.Graphics();
-    body.beginFill(0x000080); // Dark blue robe
-    body.drawRect(-15, -15, 30, 50); // Body
-    body.endFill();
-    
-    // Create robe bottom (wider)
-    const robeBottom = new PIXI.Graphics();
-    robeBottom.beginFill(0x000080); // Dark blue
-    robeBottom.drawPolygon([
-      -15, 35, // Left top
-      15, 35,  // Right top
-      25, 50,  // Right bottom
-      -25, 50  // Left bottom
-    ]);
-    robeBottom.endFill();
-    
-    // Create the head
-    const head = new PIXI.Graphics();
-    head.beginFill(0xE0AC69); // Skin tone
-    head.drawCircle(0, -25, 15); // Head
-    head.endFill();
-    
-    // Create wizard hat
-    const hat = new PIXI.Graphics();
-    hat.beginFill(0x000080); // Dark blue hat
-    hat.drawPolygon([
-      -15, -30, // Left base
-      15, -30,  // Right base
-      0, -65    // Top point
-    ]);
-    hat.endFill();
-    
-    // Create hat decoration - replace drawStar with standard methods
-    // Draw stars as small circles
-    hat.beginFill(0xFFD700); // Gold stars
-    
-    // First star (center)
-    hat.drawCircle(0, -50, 3);
-    
-    // Second star (left)
-    hat.drawCircle(-10, -40, 2);
-    
-    // Third star (right)
-    hat.drawCircle(10, -45, 2.5);
-    hat.endFill();
-    
-    // Create staff
-    const staff = new PIXI.Graphics();
-    staff.beginFill(0x8B4513); // Brown wood
-    staff.drawRect(20, -40, 5, 80); // Staff pole
-    staff.endFill();
-    
-    // Create magic orb on top of staff
-    const orb = new PIXI.Graphics();
-    orb.beginFill(0x00BFFF); // Light blue
-    orb.drawCircle(22.5, -45, 10); // Orb
-    orb.endFill();
-    
-    // Add glow to orb
-    orb.beginFill(0x00BFFF, 0.5);
-    orb.drawCircle(22.5, -45, 15);
-    orb.endFill();
-    
-    // Add all parts to the container
-    container.addChild(robeBottom, body, head, hat, staff, orb);
-    
-    // Create and return texture
-    return this.app.renderer.generateTexture(container, {
-      resolution: 1,
-      region: new PIXI.Rectangle(-40, -70, 80, 120)
-    });
-  }
-
-  /**
-   * Create a ranger sprite
-   * @returns {PIXI.RenderTexture} The ranger sprite texture
-   */
-  createRangerSprite() {
-    // Create a container for the ranger sprite
-    const container = new PIXI.Container();
-    
-    // Create the body
-    const body = new PIXI.Graphics();
-    body.beginFill(0x228B22); // Forest green
-    body.drawRect(-15, -15, 30, 50); // Body
-    body.endFill();
-    
-    // Create the head
-    const head = new PIXI.Graphics();
-    head.beginFill(0xE0AC69); // Skin tone
-    head.drawCircle(0, -25, 15); // Head
-    head.endFill();
-    
-    // Create hood
-    const hood = new PIXI.Graphics();
-    hood.beginFill(0x228B22); // Forest green
-    hood.drawCircle(0, -25, 17); // Outer hood
-    hood.endFill();
-    hood.beginFill(0xE0AC69); // Skin tone
-    hood.drawCircle(0, -25, 15); // Cut out inner circle for face
-    hood.endFill();
-    
-    // Create cape
-    const cape = new PIXI.Graphics();
-    cape.beginFill(0x006400, 0.7); // Dark green, semi-transparent
-    cape.drawPolygon([
-      -15, -15, // Left top
-      15, -15,  // Right top
-      20, 35,   // Right bottom
-      -20, 35   // Left bottom
-    ]);
-    cape.endFill();
-    
-    // Create bow
-    const bow = new PIXI.Graphics();
-    bow.lineStyle(3, 0x8B4513, 1); // Brown wood
-    bow.moveTo(25, -40);
-    bow.quadraticCurveTo(40, 0, 25, 40);
-    
-    // Create bowstring
-    bow.lineStyle(1, 0xFFFFFF, 1);
-    bow.moveTo(25, -40);
-    bow.lineTo(25, 40);
-    
-    // Add arrow
-    const arrow = new PIXI.Graphics();
-    arrow.lineStyle(2, 0x8B4513, 1);
-    arrow.moveTo(25, 0);
-    arrow.lineTo(-5, 0);
-    arrow.lineStyle(1, 0x333333, 1);
-    arrow.moveTo(-5, 0);
-    arrow.lineTo(-15, -5);
-    arrow.moveTo(-5, 0);
-    arrow.lineTo(-15, 5);
-    
-    // Add all parts to the container (in proper z-order)
-    container.addChild(cape, body, hood, head, bow, arrow);
-    
-    // Create and return texture
-    return this.app.renderer.generateTexture(container, {
-      resolution: 1,
-      region: new PIXI.Rectangle(-40, -50, 90, 100)
-    });
   }
 } 

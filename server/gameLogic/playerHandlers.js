@@ -110,7 +110,7 @@ function handleMovementInput(player, game, data) {
   // Update player velocity based on input
   const { directionX, directionY } = data;
   
-  // Log movement for debugging
+  // Store old position for reference
   const oldPos = { ...player.position };
   
   // Calculate movement speed
@@ -125,7 +125,9 @@ function handleMovementInput(player, game, data) {
   // Check for stop command
   const isStopping = (directionX === 0 && directionY === 0);
   if (isStopping) {
-    console.log(`Player ${player.id} stopping at (${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)})`);
+    // Just stop the player without logging
+    player.velocity.x = 0;
+    player.velocity.y = 0;
   } else {
     // Update player position directly for testing
     player.position.x += player.velocity.x * 0.05; // Assume 50ms delta time
@@ -139,9 +141,6 @@ function handleMovementInput(player, game, data) {
         player.facingDirection = directionY > 0 ? 'down' : 'up';
       }
     }
-    
-    // Log position change
-    console.log(`Player ${player.id} moved from (${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)}) to (${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)})`);
   }
 }
 

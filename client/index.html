@@ -52,13 +52,14 @@
       </div>
       <div class="name-input">
         <label for="player-name">Character Name:</label>
-        <input type="text" id="player-name" maxlength="16" placeholder="Enter name...">
+        <input type="text" id="player-name" maxlength="16" placeholder="Enter name..." autocomplete="off" autofocus>
+        <div class="input-hint">Enter a name to continue</div>
       </div>
       <div class="debug-option">
         <input type="checkbox" id="debug-mode" name="debug-mode">
         <label for="debug-mode">Enable Debug Mode</label>
       </div>
-      <button id="start-game">Enter the World</button>
+      <button id="start-game" onclick="if(window.game && typeof window.game.startGame === 'function') window.game.startGame(); console.log('Direct button click handled');">Enter the World</button>
     </div>
     
     <!-- Game UI overlays -->

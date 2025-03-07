@@ -135,9 +135,35 @@ class Input {
     this.mousePosition.x = event.clientX;
     this.mousePosition.y = event.clientY;
     
-    // Update world position if renderer exists
+    // Update world position if renderer exists and has the screenToWorld method
     if (this.game.renderer) {
-      this.mouseWorldPosition = this.game.renderer.screenToWorld(this.mousePosition.x, this.mousePosition.y);
+      try {
+        if (typeof this.game.renderer.screenToWorld === 'function') {
+          this.mouseWorldPosition = this.game.renderer.screenToWorld(this.mousePosition.x, this.mousePosition.y);
+        } else {
+          // Fallback if screenToWorld isn't available yet
+          console.warn("screenToWorld method not available on renderer - using fallback");
+          
+          // Simple fallback conversion (assumes camera at center with no zoom)
+          const centerX = CONFIG.GAME_WIDTH / 2;
+          const centerY = CONFIG.GAME_HEIGHT / 2;
+          
+          // Convert screen to world using the player position as reference
+          if (this.game.player) {
+            this.mouseWorldPosition = {
+              x: this.game.player.position.x + (this.mousePosition.x - centerX),
+              y: this.game.player.position.y + (this.mousePosition.y - centerY)
+            };
+          } else {
+            // If no player, just use screen coordinates
+            this.mouseWorldPosition = { ...this.mousePosition };
+          }
+        }
+      } catch (err) {
+        console.error("Error in handleMouseMove:", err);
+        // Ensure mouseWorldPosition always has a valid value
+        this.mouseWorldPosition = { ...this.mousePosition };
+      }
     }
   }
   

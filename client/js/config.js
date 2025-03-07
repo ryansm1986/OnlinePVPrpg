@@ -6,8 +6,8 @@ const CONFIG = {
   // Game settings
   GAME_WIDTH: window.innerWidth,
   GAME_HEIGHT: window.innerHeight,
-  WORLD_WIDTH: 2000,
-  WORLD_HEIGHT: 2000,
+  WORLD_WIDTH: 4000,  // Doubled from 2000
+  WORLD_HEIGHT: 4000, // Doubled from 2000
   
   // Network settings
   SERVER_URL: window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin,
@@ -78,6 +78,20 @@ const CONFIG = {
     common: 0xFFFFFF, // White
     rare: 0x4169E1, // Royal blue
     legendary: 0xFFD700 // Gold
+  },
+  
+  // Terrain settings
+  TERRAIN: {
+    MAX_TREES: 120,        // Reduced from 300 to help with memory issues
+    MAX_ROCKS: 80,         // Reduced from 180 to help with memory issues
+    TREE_SIZE: {
+      min: 20,
+      max: 32
+    },
+    ROCK_SIZE: {
+      min: 10,
+      max: 20
+    }
   },
   
   // Debug settings

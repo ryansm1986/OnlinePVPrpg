@@ -18,6 +18,7 @@ class World {
     this.biomes = [];
     this.exits = [];
     this.landmarks = [];
+    this.terrainFeatures = [];
     
     // Bind methods
     this.update = this.update.bind(this);
@@ -51,6 +52,11 @@ class World {
     // Update landmarks
     if (data.landmarks) {
       this.landmarks = data.landmarks;
+    }
+    
+    // Update terrain features if provided
+    if (data.terrainFeatures) {
+      this.terrainFeatures = data.terrainFeatures;
     }
   }
   
@@ -98,6 +104,23 @@ class World {
     }
     
     return null;
+  }
+  
+  /**
+   * Get terrain features at position
+   * @param {Object} position - Position to check
+   * @param {number} radius - Search radius
+   * @returns {Array} Array of terrain features at position
+   */
+  getTerrainFeaturesAt(position, radius = 50) {
+    return this.terrainFeatures.filter(feature => {
+      const distance = Math.sqrt(
+        Math.pow(position.x - feature.position.x, 2) + 
+        Math.pow(position.y - feature.position.y, 2)
+      );
+      
+      return distance <= radius;
+    });
   }
   
   /**

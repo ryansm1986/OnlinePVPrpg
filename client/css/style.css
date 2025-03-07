@@ -85,7 +85,7 @@ canvas {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 90;
+  z-index: 1000;
   padding: 2rem;
 }
 
@@ -100,6 +100,10 @@ canvas {
   justify-content: center;
   gap: 2rem;
   margin-bottom: 2rem;
+  width: 100%;
+  max-width: 1000px;
+  z-index: 1001; /* Higher than parent */
+  position: relative;
 }
 
 .character-option {
@@ -111,6 +115,23 @@ canvas {
   margin: 0 1rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  position: relative;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.character-option::before {
+  content: "Click to select";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(74, 144, 226, 0.8);
+  color: white;
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .character-option:hover {
@@ -119,9 +140,20 @@ canvas {
   border-color: #4a90e2;
 }
 
+.character-option:hover::before {
+  opacity: 1;
+}
+
 .character-option.selected {
   border-color: #4a90e2;
   background-color: #2a3b4d;
+  box-shadow: 0 0 15px rgba(74, 144, 226, 0.5);
+}
+
+.character-option.selected::before {
+  content: "Selected";
+  background-color: #2ecc71;
+  opacity: 1;
 }
 
 .character-option h2 {
@@ -183,16 +215,23 @@ canvas {
   transform: translateY(0);
 }
 
+/* Character preview classes with fallback backgrounds */
 .character-preview.warrior {
   background-image: url('../assets/warrior.jpg');
+  /* Fallback if image doesn't load */
+  background-color: #9c2b2b;
 }
 
 .character-preview.mage {
   background-image: url('../assets/wizard.jpg');
+  /* Fallback if image doesn't load */
+  background-color: #2b4a9c;
 }
 
 .character-preview.ranger {
   background-image: url('../assets/ranger.jpg');
+  /* Fallback if image doesn't load */
+  background-color: #2b9c3e;
 }
 
 .character-option p {
@@ -251,22 +290,62 @@ canvas {
 
 #start-game {
   padding: 1rem 2rem;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   background-color: #4a90e2;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 5px 15px rgba(74, 144, 226, 0.4);
+  margin-top: 2rem;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+
+#start-game::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(45deg);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  0% {
+    transform: translateX(-100%) rotate(45deg);
+  }
+  20%, 100% {
+    transform: translateX(100%) rotate(45deg);
+  }
 }
 
 #start-game:hover {
   background-color: #3a80d2;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(74, 144, 226, 0.6);
 }
 
 #start-game:disabled {
   background-color: #555;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+
+#start-game:disabled::after {
+  display: none;
 }
 
 /* Game UI */
@@ -283,8 +362,13 @@ canvas {
 .player-stats {
   position: absolute;
   top: 20px;
-  left: 20px;
-  width: 300px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 400px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .health-bar, .xp-bar {
@@ -570,4 +654,11 @@ canvas {
   100% {
     transform: translateY(0px);
   }
+}
+
+.input-hint {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-top: 5px;
+  font-style: italic;
 } 

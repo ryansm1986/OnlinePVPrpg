@@ -14,8 +14,8 @@ class GameWorld {
     this.bosses = new Map(); // Map of boss objects by UUID
     
     // World properties
-    this.width = 2000;
-    this.height = 2000;
+    this.width = 4000;
+    this.height = 4000;
     this.biomes = []; // Will be populated by WorldGenerator
     
     // Initialize the world

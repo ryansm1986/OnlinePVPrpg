@@ -50,8 +50,20 @@ class Game {
    */
   init() {
     try {
-      // Create game systems
-      this.renderer = new Renderer(this);
+      // Create game systems with proper error handling
+      try {
+        this.renderer = new Renderer(this);
+        console.log("Renderer created successfully");
+      } catch (rendererError) {
+        console.error("Failed to create Renderer:", rendererError);
+        // Create a minimal renderer stub to prevent null references
+        this.renderer = {
+          init: function() { console.log("Stub renderer init called"); },
+          render: function() { console.log("Stub renderer render called"); }
+        };
+      }
+      
+      // Create other systems
       this.network = new Network(this);
       this.input = new Input(this);
       this.ui = new UI(this);
@@ -59,24 +71,35 @@ class Game {
       // Try to initialize systems
       try {
         this.renderer.init();
-      } catch (renderError) {
-        console.error("Failed to initialize normal renderer:", renderError);
-        this.forceFallbackRendering();
+        this.network.init();
+        this.input.init();
+        this.ui.init();
+        
+        // Set up event listeners
+        console.log("Setting up event listeners...");
+        this.setupEventListeners();
+        
+        // Start the game loop
+        this.lastUpdateTime = performance.now();
+        requestAnimationFrame(this.update);
+        
+        // Mark game as running
+        this.isRunning = true;
+        
+        // Load assets and show character selection screen
+        console.log("Starting asset loading...");
+        this.loadAssets();
+        
+        // Debug message
+        console.log("Game initialized successfully!");
+      } catch (initError) {
+        console.error("Error during initialization:", initError);
+        throw new Error("Failed to initialize game systems");
       }
-      
-      // Initialize other systems
-      this.network.init();
-      this.input.init();
-      this.ui.init();
-      
-      // Set up event listeners
-      this.setupEventListeners();
-      
-      // Start loading assets
-      this.loadAssets();
     } catch (error) {
       console.error("Critical error during game initialization:", error);
-      alert("Failed to initialize game. Check console for details.");
+      document.getElementById('error-message').textContent = error.message;
+      document.getElementById('error-overlay').classList.remove('hidden');
     }
   }
   
@@ -108,15 +131,39 @@ class Game {
     
     // Character selection
     const characterOptions = document.querySelectorAll('.character-option');
+    console.log(`Found ${characterOptions.length} character options for selection`);
+    
+    // Function to handle character selection
+    const handleCharacterSelection = (option) => {
+      console.log(`Character option selected: ${option.getAttribute('data-class')}`);
+      // Remove selected class from all options
+      characterOptions.forEach(opt => opt.classList.remove('selected'));
+      // Add selected class to clicked option
+      option.classList.add('selected');
+      
+      // Enable start button if name is also entered
+      this.checkStartButtonState();
+    };
+    
+    // Add click event to the entire character option card
     characterOptions.forEach(option => {
       option.addEventListener('click', () => {
-        // Remove selected class from all options
-        characterOptions.forEach(opt => opt.classList.remove('selected'));
-        // Add selected class to clicked option
-        option.classList.add('selected');
+        handleCharacterSelection(option);
+      });
+    });
+    
+    // Also add click events to the character previews for redundancy
+    const characterPreviews = document.querySelectorAll('.character-preview');
+    characterPreviews.forEach(preview => {
+      preview.addEventListener('click', (e) => {
+        // Find the parent character option
+        const parentOption = preview.closest('.character-option');
+        if (parentOption) {
+          handleCharacterSelection(parentOption);
+        }
         
-        // Enable start button if name is also entered
-        this.checkStartButtonState();
+        // Stop event propagation to prevent double-handling
+        e.stopPropagation();
       });
     });
     
@@ -139,7 +186,17 @@ class Game {
     const selectedClass = document.querySelector('.character-option.selected');
     const startButton = document.getElementById('start-game');
     
-    startButton.disabled = !nameInput.value || !selectedClass;
+    const nameEntered = nameInput && nameInput.value && nameInput.value.trim().length > 0;
+    const classSelected = selectedClass !== null;
+    
+    console.log(`Start button state check - Name entered: ${nameEntered}, Class selected: ${classSelected}`);
+    
+    if (startButton) {
+      startButton.disabled = !nameEntered || !classSelected;
+      console.log(`Start button is now ${startButton.disabled ? 'disabled' : 'enabled'}`);
+    } else {
+      console.error("Start button element not found!");
+    }
   }
   
   /**
@@ -170,44 +227,71 @@ class Game {
    * Called when assets are loaded
    */
   onAssetsLoaded() {
-    // Hide loading screen
-    document.getElementById('loading-screen').classList.add('hidden');
-    
-    // Show character selection
-    document.getElementById('character-select').classList.remove('hidden');
+    try {
+      console.log("Assets loaded, showing character select screen");
+      
+      // Hide loading screen
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.classList.add('hidden');
+      } else {
+        console.error("Loading screen element not found");
+      }
+      
+      // Show character selection
+      const characterSelect = document.getElementById('character-select');
+      if (characterSelect) {
+        characterSelect.classList.remove('hidden');
+        console.log("Character select screen shown");
+      } else {
+        console.error("Character select element not found");
+      }
+    } catch (error) {
+      console.error("Error in onAssetsLoaded:", error);
+    }
   }
   
   /**
    * Start the game
    */
   startGame() {
+    console.log("Start game button clicked");
     const playerName = document.getElementById('player-name').value;
     const selectedClass = document.querySelector('.character-option.selected');
     
     if (!playerName || !selectedClass) {
+      console.warn("Cannot start game: missing player name or character class");
       return;
     }
     
     const characterClass = selectedClass.getAttribute('data-class');
+    console.log(`Starting game with name: ${playerName}, class: ${characterClass}`);
     
     // Set debug mode based on checkbox
     const debugCheckbox = document.getElementById('debug-mode');
     this.debugMode = debugCheckbox ? debugCheckbox.checked : false;
+    console.log(`Debug mode: ${this.debugMode}`);
     
-    // Hide character selection
-    document.getElementById('character-select').classList.add('hidden');
-    
-    // Show game UI
-    document.getElementById('game-ui').classList.remove('hidden');
-    
-    // Join the game
-    this.network.joinGame(playerName, characterClass);
-    
-    // Start game loop
-    this.isRunning = true;
-    this.gameStarted = true;
-    this.lastUpdateTime = performance.now();
-    requestAnimationFrame(this.update);
+    try {
+      // Hide character selection
+      document.getElementById('character-select').classList.add('hidden');
+      
+      // Show game UI
+      document.getElementById('game-ui').classList.remove('hidden');
+      
+      // Join the game
+      console.log("Joining game via network...");
+      this.network.joinGame(playerName, characterClass);
+      
+      // Start game loop
+      this.isRunning = true;
+      this.gameStarted = true;
+      this.lastUpdateTime = performance.now();
+      requestAnimationFrame(this.update);
+      console.log("Game started successfully");
+    } catch (error) {
+      console.error("Error starting game:", error);
+    }
   }
   
   /**
@@ -244,7 +328,16 @@ class Game {
   updateGameObjects() {
     // Update player
     if (this.player) {
+      // Store previous position to restore if collision occurs
+      const prevPosition = { 
+        x: this.player.position.x, 
+        y: this.player.position.y 
+      };
+      
       this.player.update(this.deltaTime);
+      
+      // Check for collision with terrain features after movement
+      this.checkTerrainCollisions(this.player, prevPosition);
       
       // Initialize projectiles array if it doesn't exist
       if (!this.player.projectiles) {
@@ -257,6 +350,9 @@ class Game {
     
     // Update other players
     this.players.forEach(player => {
+      // Only apply terrain collision for the current player (server handles other players)
+      if (player === this.player) return;
+      
       player.update(this.deltaTime);
       
       // Initialize projectiles array if it doesn't exist
@@ -274,6 +370,52 @@ class Game {
         monster.update(this.deltaTime);
       }
     });
+  }
+  
+  /**
+   * Check for collisions between a player and terrain features
+   * @param {Object} player - The player to check
+   * @param {Object} prevPosition - The player's previous position
+   */
+  checkTerrainCollisions(player, prevPosition) {
+    // Skip if renderer doesn't exist or no terrain features
+    if (!this.renderer || !this.renderer.terrainFeatures) return;
+    
+    // Player collision radius (half their size)
+    const playerRadius = CONFIG.PLAYER_SIZE / 2;
+    
+    // Check each terrain feature
+    let hasCollision = false;
+    
+    // Only check terrain features that are close to the player for efficiency
+    // This is much more efficient than checking all features, especially with a large world
+    for (const feature of this.renderer.terrainFeatures) {
+      // Skip checking features that are too far away
+      const maxDistance = playerRadius + Math.max(feature.radius, 20);
+      const dx = player.position.x - feature.position.x;
+      const dy = player.position.y - feature.position.y;
+      
+      // Quick check with squared distance (avoids expensive sqrt)
+      const distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared > maxDistance * maxDistance) {
+        continue;
+      }
+      
+      // More precise distance calculation
+      const distance = Math.sqrt(distanceSquared);
+      
+      // Check if collision occurs
+      if (distance < (playerRadius + feature.radius)) {
+        hasCollision = true;
+        break;
+      }
+    }
+    
+    // If collision detected, revert to previous position
+    if (hasCollision) {
+      player.position.x = prevPosition.x;
+      player.position.y = prevPosition.y;
+    }
   }
   
   /**
@@ -466,42 +608,54 @@ class Game {
    * Handle combat event
    */
   handleCombatEvent(data) {
-    // Find attacker and target
-    let attacker = null;
-    let target = null;
-    
-    // Check if attacker is player
-    if (this.player && this.player.id === data.attackerId) {
-      attacker = this.player;
-    } else if (this.players.has(data.attackerId)) {
-      attacker = this.players.get(data.attackerId);
-    } else if (this.monsters.has(data.attackerId)) {
-      attacker = this.monsters.get(data.attackerId);
-    } else if (this.bosses.has(data.attackerId)) {
-      attacker = this.bosses.get(data.attackerId);
-    }
-    
-    // Check if target is player
-    if (this.player && this.player.id === data.targetId) {
-      target = this.player;
-    } else if (this.players.has(data.targetId)) {
-      target = this.players.get(data.targetId);
-    } else if (this.monsters.has(data.targetId)) {
-      target = this.monsters.get(data.targetId);
-    } else if (this.bosses.has(data.targetId)) {
-      target = this.bosses.get(data.targetId);
-    }
-    
-    // If we found both attacker and target
-    if (attacker && target) {
-      // Update target health
-      target.health = data.targetHealth;
+    try {
+      // Find attacker and target
+      let attacker = null;
+      let target = null;
       
-      // Show damage text
-      this.renderer.showDamageText(target.position.x, target.position.y, data.damage);
+      // Check if attacker is player
+      if (this.player && this.player.id === data.attackerId) {
+        attacker = this.player;
+      } else if (this.players.has(data.attackerId)) {
+        attacker = this.players.get(data.attackerId);
+      } else if (this.monsters.has(data.attackerId)) {
+        attacker = this.monsters.get(data.attackerId);
+      } else if (this.bosses.has(data.attackerId)) {
+        attacker = this.bosses.get(data.attackerId);
+      }
       
-      // Play hit animation
-      this.renderer.playHitAnimation(target);
+      // Check if target is player
+      if (this.player && this.player.id === data.targetId) {
+        target = this.player;
+      } else if (this.players.has(data.targetId)) {
+        target = this.players.get(data.targetId);
+      } else if (this.monsters.has(data.targetId)) {
+        target = this.monsters.get(data.targetId);
+      } else if (this.bosses.has(data.targetId)) {
+        target = this.bosses.get(data.targetId);
+      }
+      
+      // If we found both attacker and target
+      if (attacker && target) {
+        // Update target health
+        target.health = data.targetHealth;
+        
+        // Show damage text if renderer has the method
+        if (this.renderer && typeof this.renderer.showDamageText === 'function') {
+          this.renderer.showDamageText(target.position.x, target.position.y, data.damage);
+        } else {
+          console.warn("Could not show damage text: method not available");
+        }
+        
+        // Play hit animation if renderer has the method
+        if (this.renderer && typeof this.renderer.playHitAnimation === 'function') {
+          this.renderer.playHitAnimation(target);
+        } else {
+          console.warn("Could not play hit animation: method not available");
+        }
+      }
+    } catch (error) {
+      console.error("Error handling combat event:", error);
     }
   }
   
@@ -834,9 +988,9 @@ class Game {
       return;
     }
     
-    // Define default world bounds in case world is not defined
-    const worldWidth = this.world ? this.world.width : 1000;
-    const worldHeight = this.world ? this.world.height : 1000;
+    // Always use CONFIG for world bounds instead of default 1000
+    const worldWidth = CONFIG.WORLD_WIDTH;
+    const worldHeight = CONFIG.WORLD_HEIGHT;
     
     // Update projectile positions
     for (let i = player.projectiles.length - 1; i >= 0; i--) {
@@ -899,14 +1053,20 @@ class Game {
       this.world = {};
     }
     
-    // Update world properties
-    this.world.width = data.width || 1000;
-    this.world.height = data.height || 1000;
+    // Update world properties - use CONFIG values as the source of truth, but consider server values
+    this.world.width = CONFIG.WORLD_WIDTH;
+    this.world.height = CONFIG.WORLD_HEIGHT;
     this.world.biomes = data.biomes || [];
     this.world.exits = data.exits || [];
     this.world.landmarks = data.landmarks || [];
     
+    // Ensure the world width/height matches the CONFIG
+    if (data.width !== CONFIG.WORLD_WIDTH || data.height !== CONFIG.WORLD_HEIGHT) {
+      console.warn("Server world size differs from client CONFIG. Using client CONFIG values:", 
+                  CONFIG.WORLD_WIDTH + "x" + CONFIG.WORLD_HEIGHT);
+    }
+    
     // Log world initialization
-    console.log("World data received - Width:", this.world.width, "Height:", this.world.height);
+    console.log("World data initialized - Width:", this.world.width, "Height:", this.world.height);
   }
 } 

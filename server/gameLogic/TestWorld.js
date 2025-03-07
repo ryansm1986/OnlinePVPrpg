@@ -16,9 +16,9 @@ class TestWorld {
     // Projectiles collection
     this.projectiles = new Map(); // Map of projectiles by ID
     
-    // Simple world properties
-    this.width = 1000;
-    this.height = 1000;
+    // Updated world properties to match client's expanded size
+    this.width = 4000;
+    this.height = 4000;
     
     // Create a single biome for the entire world
     this.biomes = [
@@ -82,8 +82,15 @@ class TestWorld {
   }
   
   getRandomSpawnPoint() {
-    // Always spawn in the center for testing
-    return { x: this.width / 2, y: this.height / 2 };
+    // Spawn players in the center area of the map for the larger world
+    const centerX = this.width / 2;
+    const centerY = this.height / 2;
+    
+    // Add some randomness but keep them near the center (within 500 units)
+    return { 
+      x: centerX + (Math.random() * 1000 - 500),
+      y: centerY + (Math.random() * 1000 - 500)
+    };
   }
   
   update() {
