@@ -63,6 +63,7 @@ class TextureManager {
    * Load player character textures
    */
   loadPlayerTextures() {
+    console.log("Loading player textures for each class...");
     // Create a simple texture for each class
     this.loadClassTexture('warrior', 'warrior');
     this.loadClassTexture('mage', 'mage');
@@ -102,7 +103,10 @@ class TextureManager {
    */
   loadClassTexture(className, path) {
     try {
-      // Creating fallback colored rectangles based on class
+      // Log that we're loading this class texture
+      console.log(`Loading texture for class ${className}`);
+      
+      // Creating colored rectangles based on class
       const classColors = {
         warrior: 0xFF0000, // Red
         mage: 0x0000FF,    // Blue
@@ -110,6 +114,15 @@ class TextureManager {
       };
       
       const color = classColors[className] || 0xFFFFFF;
+      
+      // Ensure CONFIG.PLAYER_SIZE exists and is valid
+      if (typeof CONFIG === 'undefined' || !CONFIG.PLAYER_SIZE || CONFIG.PLAYER_SIZE <= 0) {
+        console.error("CONFIG.PLAYER_SIZE is missing or invalid, using default size of 32");
+        CONFIG = CONFIG || {};
+        CONFIG.PLAYER_SIZE = CONFIG.PLAYER_SIZE || 32;
+      }
+      
+      console.log(`Creating texture for ${className} with size ${CONFIG.PLAYER_SIZE}x${CONFIG.PLAYER_SIZE}`);
       
       // Create a simple texture based on class color
       const texture = this.createColoredRectTexture(color, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
@@ -128,11 +141,13 @@ class TextureManager {
       this.renderer.playerTextures = this.renderer.playerTextures || {};
       this.renderer.playerTextures[className] = frames;
       
+      console.log(`Successfully loaded textures for class ${className}`);
+      
     } catch (error) {
       console.error(`Error loading texture for class ${className}:`, error);
       
-      // Create fallback texture
-      const fallbackTexture = this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
+      // Create fallback texture with explicit size
+      const fallbackTexture = this.createColoredRectTexture(0x00ff00, 32, 32);
       
       // Set fallback frames
       const frames = { 
@@ -429,6 +444,54 @@ class TextureManager {
     } catch (error) {
       console.error("Error creating explosion texture:", error);
       return this.createColoredRectTexture(0xFF8800, size, size);
+    }
+  }
+  
+  /**
+   * Create a grass texture for ground tiles
+   * @returns {PIXI.Texture} The created texture
+   */
+  createGrassTexture() {
+    try {
+      // Check if app is initialized
+      if (!this.renderer.app || !this.renderer.app.renderer) {
+        console.warn("Cannot create grass texture - renderer not initialized");
+        // Return a simple fallback texture
+        return this.createColoredRectTexture(0x33AA33, 64, 64);
+      }
+      
+      const graphics = new PIXI.Graphics();
+      
+      // Base grass color
+      graphics.beginFill(0x33AA33); // Medium green
+      graphics.drawRect(0, 0, 64, 64);
+      graphics.endFill();
+      
+      // Add some texture/detail with varied greens
+      for (let i = 0; i < 20; i++) {
+        // Random positions within the tile
+        const x = Math.random() * 64;
+        const y = Math.random() * 64;
+        const size = 2 + Math.random() * 4;
+        
+        // Slightly varied green colors
+        const green = 0.6 + Math.random() * 0.4; // Value between 0.6 and 1
+        const color = PIXI.utils.rgb2hex([0, green, 0]);
+        
+        graphics.beginFill(color, 0.7);
+        graphics.drawCircle(x, y, size);
+        graphics.endFill();
+      }
+      
+      const texture = this.renderer.app.renderer.generateTexture(graphics);
+      
+      // Clean up the graphics object
+      graphics.destroy();
+      
+      return texture;
+    } catch (error) {
+      console.error("Error creating grass texture:", error);
+      return this.createColoredRectTexture(0x33AA33, 64, 64);
     }
   }
   

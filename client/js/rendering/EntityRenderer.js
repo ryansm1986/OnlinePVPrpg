@@ -98,14 +98,20 @@ class EntityRenderer {
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';
     
+    console.log(`Rendering player: ${playerId}, class: ${charClass}`);
+    
     // Ensure textures for this class exist
     if (!this.renderer.playerTextures[charClass]) {
       console.warn(`No textures found for class ${charClass}, creating fallback`);
       const fallbackColor = charClass === 'warrior' ? 0xFF0000 : 
                            charClass === 'mage' ? 0x0000FF : 0x00FF00;
       
+      // Using a fixed size for fallback textures
+      const playerSize = CONFIG && CONFIG.PLAYER_SIZE > 0 ? CONFIG.PLAYER_SIZE : 32;
+      console.log(`Creating fallback texture for ${charClass} with size ${playerSize}x${playerSize}`);
+      
       const fallbackTexture = this.renderer.textureManager.createColoredRectTexture(
-        fallbackColor, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE
+        fallbackColor, playerSize, playerSize
       );
       
       this.renderer.playerTextures[charClass] = { 
@@ -132,12 +138,20 @@ class EntityRenderer {
         // Get frames for this direction
         const directionFrames = textures[direction] || textures.down;
         
+        // Log frame count for debugging
+        console.log(`${charClass} direction ${direction} has ${directionFrames.length} frames`);
+        
         // Calculate animation frame based on time or movement
         const animationSpeed = 200; // ms per frame
         const frameIndex = Math.floor(Date.now() / animationSpeed) % directionFrames.length;
         
         // Get the current texture
         const currentTexture = directionFrames[frameIndex];
+        
+        if (!currentTexture) {
+          console.error(`Missing texture for ${charClass}, direction ${direction}, frame ${frameIndex}`);
+          return;
+        }
         
         // Create sprite if it doesn't exist, or update texture if it does
         if (!sprite) {
@@ -158,6 +172,11 @@ class EntityRenderer {
       } else {
         // Use default/static texture
         if (!sprite) {
+          if (!textures.default) {
+            console.error(`Missing default texture for ${charClass}`);
+            return;
+          }
+          
           sprite = new PIXI.Sprite(textures.default);
           this._playerSpriteCache.set(playerId, sprite);
           
@@ -168,6 +187,16 @@ class EntityRenderer {
           sprite.width = CONFIG.PLAYER_SIZE;
           sprite.height = CONFIG.PLAYER_SIZE;
         }
+      }
+      
+      // Check that sprite has valid dimensions
+      if (sprite.width === 0 || sprite.height === 0) {
+        console.error(`${charClass} sprite dimensions: ${sprite.width}x${sprite.height}`);
+        
+        // Force a valid size if dimensions are zero
+        sprite.width = CONFIG.PLAYER_SIZE || 32;
+        sprite.height = CONFIG.PLAYER_SIZE || 32;
+        console.log(`Fixed ${charClass} sprite dimensions to: ${sprite.width}x${sprite.height}`);
       }
       
       // Update sprite position
@@ -190,7 +219,7 @@ class EntityRenderer {
       this.renderPlayerHealth(player);
       
     } catch (error) {
-      console.error("Error rendering player sprite:", error);
+      console.error(`Error rendering player sprite for ${charClass}:`, error);
     }
   }
   
