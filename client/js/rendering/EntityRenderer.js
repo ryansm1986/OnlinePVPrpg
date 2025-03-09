@@ -89,37 +89,12 @@ class EntityRenderer {
       return;
     }
     
-    // Ensure playerTextures exists
-    if (!this.renderer.playerTextures) {
-      console.warn("playerTextures not initialized, creating fallback textures");
-      this.renderer.playerTextures = {};
-    }
-    
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';
     
-    // Ensure textures for this class exist
-    if (!this.renderer.playerTextures[charClass]) {
-      console.warn(`No textures found for class ${charClass}, creating fallback`);
-      const fallbackColor = charClass === 'warrior' ? 0xFF0000 : 
-                           charClass === 'mage' ? 0x0000FF : 0x00FF00;
-      
-      const fallbackTexture = this.renderer.textureManager.createColoredRectTexture(
-        fallbackColor, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE
-      );
-      
-      this.renderer.playerTextures[charClass] = { 
-        default: fallbackTexture,
-        down: [fallbackTexture],
-        left: [fallbackTexture],
-        right: [fallbackTexture],
-        up: [fallbackTexture]
-      };
-    }
-    
     try {
-      // Get the textures for this class
-      const textures = this.renderer.playerTextures[charClass];
+      // Get textures for this character class from the TextureManager
+      const textures = this.renderer.textureManager.getPlayerTextures(charClass);
       
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);

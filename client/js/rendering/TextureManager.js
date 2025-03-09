@@ -21,6 +21,22 @@ class TextureManager {
       projectile: {},
       terrain: {}
     };
+    
+    // Player textures by class
+    this.playerTextures = {};
+  }
+  
+  /**
+   * Get player textures for a specific class
+   * @param {string} className - Class name to get textures for
+   * @returns {Object} Textures for the specified class
+   */
+  getPlayerTextures(className) {
+    if (!this.playerTextures[className]) {
+      console.warn(`No textures found for class ${className}, creating fallback`);
+      this.loadFallbackClassTexture(className);
+    }
+    return this.playerTextures[className];
   }
   
   /**
@@ -221,9 +237,8 @@ class TextureManager {
       // Set default frame to the first frame of the down animation
       frames.default = frames.down[0];
       
-      // Store frames by class name
-      this.renderer.playerTextures = this.renderer.playerTextures || {};
-      this.renderer.playerTextures[className] = frames;
+      // Store frames by class name in the TextureManager
+      this.playerTextures[className] = frames;
       
       console.log(`Loaded sprite sheet for class: ${className} (${framesPerAnimation} frames per direction)`);
       
@@ -261,9 +276,8 @@ class TextureManager {
       up: [texture]
     };
     
-    // Store textures by class
-    this.renderer.playerTextures = this.renderer.playerTextures || {};
-    this.renderer.playerTextures[className] = frames;
+    // Store textures by class in the TextureManager
+    this.playerTextures[className] = frames;
     
     console.log(`Created fallback texture for class: ${className}`);
   }

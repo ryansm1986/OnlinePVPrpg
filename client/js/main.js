@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
     window.game.init();
     
+    // Set up compatibility layer if we're using the modular renderer alongside old renderer
+    if (window.setupRendererCompatibility && window.game.renderer) {
+      window.setupRendererCompatibility(window.game.renderer);
+      console.log("Renderer compatibility layer initialized");
+    }
+    
     // Fallback for character selection
     setTimeout(() => {
       // Add emergency click listeners directly to character options

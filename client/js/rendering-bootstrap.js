@@ -12,8 +12,33 @@
 document.addEventListener('DOMContentLoaded', () => {
   console.log('Initializing modular rendering system...');
 
-  // Initialize all renderer modules when the DOM is ready
-  
+  // COMPATIBILITY LAYER
+  // This ensures that the old renderer.js will use TextureManager for player textures
+  // when both systems are loaded during the transition
+  window.setupRendererCompatibility = function(oldRenderer) {
+    if (!oldRenderer || !oldRenderer.textureManager) return;
+    
+    // Override old renderer's playerTextures with a proxy that redirects to TextureManager
+    Object.defineProperty(oldRenderer, 'playerTextures', {
+      get: function() {
+        console.log("Accessing playerTextures via compatibility layer");
+        return oldRenderer.textureManager.playerTextures;
+      },
+      set: function(value) {
+        console.log("Setting playerTextures via compatibility layer");
+        // Don't actually set anything - the TextureManager manages textures now
+        // This prevents accidental overrides
+      }
+    });
+    
+    // Add a helper method to the old renderer to load class textures through TextureManager
+    oldRenderer.loadClassTexture = function(className, path) {
+      return oldRenderer.textureManager.loadClassTexture(className, path);
+    };
+    
+    console.log("Renderer compatibility layer established");
+  };
+
   // SPRITE SHEET INTEGRATION GUIDE:
   //
   // For sprite sheet support:
