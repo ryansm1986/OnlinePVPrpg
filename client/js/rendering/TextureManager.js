@@ -46,7 +46,11 @@ class TextureManager {
       this.loadProjectileTextures();
       
       // Load player textures
-      this.loadPlayerTextures();
+      if (CONFIG.USE_SPRITE_SHEETS) {
+        this.preloadClassSpritesheets();
+      } else {
+        this.loadPlayerTextures();
+      }
       
       // Load monster textures
       this.loadMonsterTextures();
@@ -60,10 +64,24 @@ class TextureManager {
   }
   
   /**
+   * Preload all character class sprite sheets
+   */
+  preloadClassSpritesheets() {
+    console.log("Preloading character sprite sheets...");
+    
+    // List of character classes
+    const classes = ['warrior', 'mage', 'ranger'];
+    
+    // Preload each class sprite sheet
+    classes.forEach(className => {
+      this.loadClassSpriteSheet(className);
+    });
+  }
+  
+  /**
    * Load player character textures
    */
   loadPlayerTextures() {
-    console.log("Loading player textures for each class...");
     // Create a simple texture for each class
     this.loadClassTexture('warrior', 'warrior');
     this.loadClassTexture('mage', 'mage');
@@ -103,65 +121,151 @@ class TextureManager {
    */
   loadClassTexture(className, path) {
     try {
-      // Log that we're loading this class texture
-      console.log(`Loading texture for class ${className}`);
+      // Check if we have sprite sheets enabled in config
+      const useSpritesheets = CONFIG.USE_SPRITE_SHEETS || false;
       
-      // Creating colored rectangles based on class
-      const classColors = {
-        warrior: 0xFF0000, // Red
-        mage: 0x0000FF,    // Blue
-        ranger: 0x00FF00    // Green
-      };
-      
-      const color = classColors[className] || 0xFFFFFF;
-      
-      // Ensure CONFIG.PLAYER_SIZE exists and is valid
-      if (typeof CONFIG === 'undefined' || !CONFIG.PLAYER_SIZE || CONFIG.PLAYER_SIZE <= 0) {
-        console.error("CONFIG.PLAYER_SIZE is missing or invalid, using default size of 32");
-        CONFIG = CONFIG || {};
-        CONFIG.PLAYER_SIZE = CONFIG.PLAYER_SIZE || 32;
+      if (useSpritesheets) {
+        // Load and process sprite sheet
+        this.loadClassSpriteSheet(className, path);
+      } else {
+        // Fallback to colored rectangles based on class
+        this.loadFallbackClassTexture(className);
       }
-      
-      console.log(`Creating texture for ${className} with size ${CONFIG.PLAYER_SIZE}x${CONFIG.PLAYER_SIZE}`);
-      
-      // Create a simple texture based on class color
-      const texture = this.createColoredRectTexture(color, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
-      
-      // For a real game, you'd load actual sprites here
-      // For this example, we just create colored rectangles
-      const frames = {
-        default: texture,
-        down: [texture],
-        left: [texture],
-        right: [texture],
-        up: [texture]
-      };
-      
-      // Store textures by class
-      this.renderer.playerTextures = this.renderer.playerTextures || {};
-      this.renderer.playerTextures[className] = frames;
-      
-      console.log(`Successfully loaded textures for class ${className}`);
-      
     } catch (error) {
       console.error(`Error loading texture for class ${className}:`, error);
+      this.loadFallbackClassTexture(className);
+    }
+  }
+  
+  /**
+   * Load class sprite sheet
+   * @param {string} className - Class name
+   * @param {string} path - Path to sprite sheet texture
+   */
+  loadClassSpriteSheet(className, path) {
+    try {
+      // Path can be either a string path to an image or a preloaded PIXI.Texture
+      let baseTexture;
       
-      // Create fallback texture with explicit size
-      const fallbackTexture = this.createColoredRectTexture(0x00ff00, 32, 32);
+      if (typeof path === 'string') {
+        // Construct sprite sheet path
+        const sheetPath = path.includes('/') ? path : `assets/sprites/characters/${className}.png`;
+        baseTexture = PIXI.BaseTexture.from(sheetPath);
+      } else if (path instanceof PIXI.Texture) {
+        baseTexture = path.baseTexture;
+      } else {
+        throw new Error(`Invalid path type for sprite sheet: ${typeof path}`);
+      }
       
-      // Set fallback frames
-      const frames = { 
-        default: fallbackTexture,
-        down: [fallbackTexture],
-        left: [fallbackTexture],
-        right: [fallbackTexture],
-        up: [fallbackTexture]
+      // Sprite sheet dimensions
+      const sheetWidth = 576;
+      const sheetHeight = 256;
+      
+      // Individual frame dimensions
+      // The sheet is 9 columns x 4 rows
+      const frameWidth = sheetWidth / 9;  // 64px per frame
+      const frameHeight = sheetHeight / 4; // 64px per frame
+      
+      // Animation frames by direction
+      const frames = {
+        up: [],
+        left: [],
+        down: [],
+        right: [],
+        default: null
       };
       
-      // Store fallback textures
+      // Extract frames for each direction
+      // Row 0: Up animations
+      // Row 1: Left animations
+      // Row 2: Down animations
+      // Row 3: Right animations
+      
+      // Number of animation frames to extract per row
+      const framesPerAnimation = 8; // Using 8 frames for animation, leaving 1 frame unused
+      
+      for (let col = 0; col < framesPerAnimation; col++) {
+        // Up animations (row 0)
+        frames.up.push(
+          new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(col * frameWidth, 0, frameWidth, frameHeight)
+          )
+        );
+        
+        // Left animations (row 1)
+        frames.left.push(
+          new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(col * frameWidth, frameHeight, frameWidth, frameHeight)
+          )
+        );
+        
+        // Down animations (row 2)
+        frames.down.push(
+          new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(col * frameWidth, frameHeight * 2, frameWidth, frameHeight)
+          )
+        );
+        
+        // Right animations (row 3)
+        frames.right.push(
+          new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(col * frameWidth, frameHeight * 3, frameWidth, frameHeight)
+          )
+        );
+      }
+      
+      // Set default frame to the first frame of the down animation
+      frames.default = frames.down[0];
+      
+      // Store frames by class name
       this.renderer.playerTextures = this.renderer.playerTextures || {};
       this.renderer.playerTextures[className] = frames;
+      
+      console.log(`Loaded sprite sheet for class: ${className} (${framesPerAnimation} frames per direction)`);
+      
+    } catch (error) {
+      console.error(`Error loading sprite sheet for class ${className}:`, error);
+      // Fall back to colored rectangles
+      this.loadFallbackClassTexture(className);
     }
+  }
+  
+  /**
+   * Load fallback class texture with colored rectangles
+   * @param {string} className - Class name
+   */
+  loadFallbackClassTexture(className) {
+    // Creating fallback colored rectangles based on class
+    const classColors = {
+      warrior: 0xFF0000, // Red
+      mage: 0x0000FF,    // Blue
+      ranger: 0x00FF00    // Green
+    };
+    
+    const color = classColors[className] || 0xFFFFFF;
+    
+    // Create a simple texture based on class color
+    const texture = this.createColoredRectTexture(color, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
+    
+    // For a real game, you'd load actual sprites here
+    // For this example, we just create colored rectangles
+    const frames = {
+      default: texture,
+      down: [texture],
+      left: [texture],
+      right: [texture],
+      up: [texture]
+    };
+    
+    // Store textures by class
+    this.renderer.playerTextures = this.renderer.playerTextures || {};
+    this.renderer.playerTextures[className] = frames;
+    
+    console.log(`Created fallback texture for class: ${className}`);
   }
   
   /**
@@ -448,7 +552,7 @@ class TextureManager {
   }
   
   /**
-   * Create a grass texture for ground tiles
+   * Create a grass texture
    * @returns {PIXI.Texture} The created texture
    */
   createGrassTexture() {
@@ -457,28 +561,24 @@ class TextureManager {
       if (!this.renderer.app || !this.renderer.app.renderer) {
         console.warn("Cannot create grass texture - renderer not initialized");
         // Return a simple fallback texture
-        return this.createColoredRectTexture(0x33AA33, 64, 64);
+        return this.createColoredRectTexture(0x228B22, 64, 64);
       }
       
       const graphics = new PIXI.Graphics();
       
       // Base grass color
-      graphics.beginFill(0x33AA33); // Medium green
+      graphics.beginFill(0x228B22); // Forest Green
       graphics.drawRect(0, 0, 64, 64);
       graphics.endFill();
       
-      // Add some texture/detail with varied greens
-      for (let i = 0; i < 20; i++) {
-        // Random positions within the tile
+      // Add some variation
+      for (let i = 0; i < 15; i++) {
         const x = Math.random() * 64;
         const y = Math.random() * 64;
-        const size = 2 + Math.random() * 4;
+        const size = 2 + Math.random() * 5;
         
-        // Slightly varied green colors
-        const green = 0.6 + Math.random() * 0.4; // Value between 0.6 and 1
-        const color = PIXI.utils.rgb2hex([0, green, 0]);
-        
-        graphics.beginFill(color, 0.7);
+        // Random grass blade
+        graphics.beginFill(i % 2 === 0 ? 0x1D7D1D : 0x2FA82F); // Darker/lighter green
         graphics.drawCircle(x, y, size);
         graphics.endFill();
       }
@@ -491,7 +591,7 @@ class TextureManager {
       return texture;
     } catch (error) {
       console.error("Error creating grass texture:", error);
-      return this.createColoredRectTexture(0x33AA33, 64, 64);
+      return this.createColoredRectTexture(0x228B22, 64, 64);
     }
   }
   

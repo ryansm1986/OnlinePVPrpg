@@ -52,21 +52,10 @@ class Renderer {
    */
   init() {
     try {
-      // Ensure CONFIG is defined
-      if (typeof CONFIG === 'undefined') {
-        console.error("CONFIG is not defined, using default values");
-        window.CONFIG = {
-          GAME_WIDTH: window.innerWidth,
-          GAME_HEIGHT: window.innerHeight,
-          PLAYER_SIZE: 32,
-          CAMERA_LERP: 0.1
-        };
-      }
-      
       // Create PixiJS application
       this.app = new PIXI.Application({
-        width: CONFIG.GAME_WIDTH || window.innerWidth,
-        height: CONFIG.GAME_HEIGHT || window.innerHeight,
+        width: CONFIG.GAME_WIDTH,
+        height: CONFIG.GAME_HEIGHT,
         backgroundColor: 0x000000,
         antialias: true
       });

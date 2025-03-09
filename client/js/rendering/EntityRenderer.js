@@ -98,20 +98,14 @@ class EntityRenderer {
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';
     
-    console.log(`Rendering player: ${playerId}, class: ${charClass}`);
-    
     // Ensure textures for this class exist
     if (!this.renderer.playerTextures[charClass]) {
       console.warn(`No textures found for class ${charClass}, creating fallback`);
       const fallbackColor = charClass === 'warrior' ? 0xFF0000 : 
                            charClass === 'mage' ? 0x0000FF : 0x00FF00;
       
-      // Using a fixed size for fallback textures
-      const playerSize = CONFIG && CONFIG.PLAYER_SIZE > 0 ? CONFIG.PLAYER_SIZE : 32;
-      console.log(`Creating fallback texture for ${charClass} with size ${playerSize}x${playerSize}`);
-      
       const fallbackTexture = this.renderer.textureManager.createColoredRectTexture(
-        fallbackColor, playerSize, playerSize
+        fallbackColor, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE
       );
       
       this.renderer.playerTextures[charClass] = { 
@@ -130,73 +124,31 @@ class EntityRenderer {
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);
       
-      // Check if this is an animated spritesheet (has direction frames)
-      if (textures.down && textures.down.length > 0) {
-        // Determine direction based on player movement or facing
-        let direction = player.facingDirection || 'down'; // Default direction
+      // Calculate animation parameters
+      let direction = this.getPlayerDirection(player);
+      let frames = textures[direction] || textures.down;
+      
+      // Calculate animation frame based on player's state and time
+      const frameIndex = this.getAnimationFrameIndex(player, frames.length);
+      const currentTexture = frames[frameIndex];
+      
+      // Create sprite if it doesn't exist, or update texture if it does
+      if (!sprite) {
+        // Create new sprite
+        sprite = new PIXI.Sprite(currentTexture);
+        this._playerSpriteCache.set(playerId, sprite);
         
-        // Get frames for this direction
-        const directionFrames = textures[direction] || textures.down;
+        // Set the anchor to center the sprite on the player's position
+        sprite.anchor.set(0.5, 0.5);
         
-        // Log frame count for debugging
-        console.log(`${charClass} direction ${direction} has ${directionFrames.length} frames`);
-        
-        // Calculate animation frame based on time or movement
-        const animationSpeed = 200; // ms per frame
-        const frameIndex = Math.floor(Date.now() / animationSpeed) % directionFrames.length;
-        
-        // Get the current texture
-        const currentTexture = directionFrames[frameIndex];
-        
-        if (!currentTexture) {
-          console.error(`Missing texture for ${charClass}, direction ${direction}, frame ${frameIndex}`);
-          return;
-        }
-        
-        // Create sprite if it doesn't exist, or update texture if it does
-        if (!sprite) {
-          // Create new sprite
-          sprite = new PIXI.Sprite(currentTexture);
-          this._playerSpriteCache.set(playerId, sprite);
-          
-          // Set the anchor to center the sprite on the player's position
-          sprite.anchor.set(0.5, 0.5);
-          
-          // Set the size
+        // Set the size if we're not using sprite sheets
+        if (!CONFIG.USE_SPRITE_SHEETS) {
           sprite.width = CONFIG.PLAYER_SIZE;
           sprite.height = CONFIG.PLAYER_SIZE;
-        } else {
-          // Update existing sprite texture
-          sprite.texture = currentTexture;
         }
       } else {
-        // Use default/static texture
-        if (!sprite) {
-          if (!textures.default) {
-            console.error(`Missing default texture for ${charClass}`);
-            return;
-          }
-          
-          sprite = new PIXI.Sprite(textures.default);
-          this._playerSpriteCache.set(playerId, sprite);
-          
-          // Set the anchor to center the sprite on the player's position
-          sprite.anchor.set(0.5, 0.5);
-          
-          // Set the size
-          sprite.width = CONFIG.PLAYER_SIZE;
-          sprite.height = CONFIG.PLAYER_SIZE;
-        }
-      }
-      
-      // Check that sprite has valid dimensions
-      if (sprite.width === 0 || sprite.height === 0) {
-        console.error(`${charClass} sprite dimensions: ${sprite.width}x${sprite.height}`);
-        
-        // Force a valid size if dimensions are zero
-        sprite.width = CONFIG.PLAYER_SIZE || 32;
-        sprite.height = CONFIG.PLAYER_SIZE || 32;
-        console.log(`Fixed ${charClass} sprite dimensions to: ${sprite.width}x${sprite.height}`);
+        // Update existing sprite texture
+        sprite.texture = currentTexture;
       }
       
       // Update sprite position
@@ -219,8 +171,80 @@ class EntityRenderer {
       this.renderPlayerHealth(player);
       
     } catch (error) {
-      console.error(`Error rendering player sprite for ${charClass}:`, error);
+      console.error("Error rendering player sprite:", error);
     }
+  }
+  
+  /**
+   * Get player movement direction
+   * @param {Object} player - The player entity
+   * @returns {string} - Direction: 'up', 'down', 'left', or 'right'
+   */
+  getPlayerDirection(player) {
+    // Use player's facing direction if available
+    if (player.facingDirection) {
+      return player.facingDirection;
+    }
+    
+    // If player has movement data, determine direction from velocity
+    if (player.velocity) {
+      if (Math.abs(player.velocity.x) > Math.abs(player.velocity.y)) {
+        // Moving more horizontally than vertically
+        return player.velocity.x > 0 ? 'right' : 'left';
+      } else if (player.velocity.y !== 0) {
+        // Moving more vertically than horizontally
+        return player.velocity.y > 0 ? 'down' : 'up';
+      }
+    }
+    
+    // If no movement, use animation state or default to 'down'
+    if (player.animationState && player.animationState !== 'idle') {
+      return player.animationState;
+    }
+    
+    return 'down'; // Default direction
+  }
+  
+  /**
+   * Get animation frame index based on player state and time
+   * @param {Object} player - The player entity
+   * @param {number} totalFrames - Total frames in the animation
+   * @returns {number} - Frame index to display
+   */
+  getAnimationFrameIndex(player, totalFrames) {
+    // If no animation data, use system time for continuous animation
+    if (!player.animationTime) {
+      // Animation speed: frames per second
+      const animationSpeed = player.isAttacking ? 12 : // Faster during attack
+                            (this.isMoving(player) ? 8 : 4); // Normal/idle speeds
+      
+      // Calculate frame based on current time
+      return Math.floor(Date.now() / (1000 / animationSpeed)) % totalFrames;
+    }
+    
+    // Use player's animation data if available
+    return player.animationFrame % totalFrames;
+  }
+  
+  /**
+   * Check if player is moving
+   * @param {Object} player - The player entity
+   * @returns {boolean} - True if player is moving
+   */
+  isMoving(player) {
+    // Check if player has velocity
+    if (player.velocity) {
+      return player.velocity.x !== 0 || player.velocity.y !== 0;
+    }
+    
+    // Check if player's position is different from target position
+    if (player.position && player.targetPosition) {
+      return player.position.x !== player.targetPosition.x || 
+             player.position.y !== player.targetPosition.y;
+    }
+    
+    // Check animation state
+    return player.animationState === 'walk';
   }
   
   /**
