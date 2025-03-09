@@ -65,6 +65,7 @@ const CONFIG = {
   CAMERA_LERP: 0.1, // Camera smoothing factor (0-1)
   RENDER_DISTANCE: 1000, // Only render entities within this distance
   USE_SPRITE_SHEETS: true, // Enable sprite sheet animations
+  SPRITE_SHEET_DEBUG: true, // Enable sprite sheet debugging info
   
   // Biome colors
   BIOME_COLORS: {

@@ -12,33 +12,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   console.log('Initializing modular rendering system...');
 
-  // Fix for baseTexture width/height being 0
-  window.fixBaseTextureWidthHeight = function(baseTexture, defaultWidth, defaultHeight) {
-    if (!baseTexture) return baseTexture;
-    
-    // Create getters that return the default dimensions if the actual dimensions are 0
-    Object.defineProperties(baseTexture, {
-      width: {
-        get: function() {
-          return this._width && this._width > 0 ? this._width : (defaultWidth || 576);
-        },
-        set: function(value) {
-          this._width = value;
-        }
-      },
-      height: {
-        get: function() {
-          return this._height && this._height > 0 ? this._height : (defaultHeight || 256);
-        },
-        set: function(value) {
-          this._height = value;
-        }
-      }
-    });
-    
-    return baseTexture;
-  };
-
   // COMPATIBILITY LAYER
   // This ensures that the old renderer.js will use TextureManager for player textures
   // when both systems are loaded during the transition
@@ -63,18 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return oldRenderer.textureManager.loadClassTexture(className, path);
     };
     
-    // Patch the old renderer's sprite sheet loading to handle width=0 issues
-    const originalLoadClassSpriteSheet = oldRenderer.loadClassSpriteSheet;
-    if (typeof originalLoadClassSpriteSheet === 'function') {
-      oldRenderer.loadClassSpriteSheet = function(className, path) {
-        // If using the original method in renderer.js, patch it to fix dimensions
-        if (path && path.baseTexture) {
-          path.baseTexture = window.fixBaseTextureWidthHeight(path.baseTexture, 576, 256);
-        }
-        return originalLoadClassSpriteSheet.call(oldRenderer, className, path);
-      };
-    }
-    
     console.log("Renderer compatibility layer established");
   };
 
@@ -90,6 +51,77 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Place sprite sheets in assets/sprites/characters/ directory
   // 4. Name sprite sheets after the character class (e.g., warrior.png, mage.png, ranger.png)
   // 5. Set CONFIG.USE_SPRITE_SHEETS = true in config.js
+  
+  // SPRITE SHEET VALIDATOR
+  window.validateSpriteSheet = function(img) {
+    if (!img || !img.complete) {
+      console.error("Image not loaded or incomplete");
+      return false;
+    }
+    
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+    console.log(`Sprite sheet dimensions: ${width}x${height}`);
+    
+    // Check dimensions - sheets must have 4 rows for directions
+    // and each frame should be square (width/9 should equal height/4)
+    const frameWidth = Math.floor(width / 9); // 9 potential frames per row
+    const frameHeight = Math.floor(height / 4); // 4 rows (up, left, down, right)
+    
+    console.log(`Calculated frame size: ${frameWidth}x${frameHeight}`);
+    
+    // Check if frames have reasonable dimensions
+    if (frameWidth < 16 || frameHeight < 16) {
+      console.error("Frames are too small, need to be at least 16x16 pixels");
+      return false;
+    }
+    
+    // Check if sheet has proper aspect ratio for frame extraction
+    if (Math.abs(frameWidth - frameHeight) > 8) {
+      console.warn("Frames are not square - this may cause visual issues");
+    }
+    
+    // Check how many complete frames fit horizontally
+    const completeFrames = Math.floor(width / frameWidth);
+    console.log(`Complete frames that fit horizontally: ${completeFrames}`);
+    
+    if (completeFrames < 3) {
+      console.error("Not enough frames for animation (need at least 3)");
+      return false;
+    }
+    
+    // Provide specific guidance based on the image dimensions
+    if (width === 365 && height === 497) {
+      console.warn("====== DETECTED 365x497 SPRITE SHEET ======");
+      console.warn("Your sprite sheet has unusual dimensions.");
+      console.warn("For best results, resize to 576x256 with:");
+      console.warn("- Width: 9 frames x 64px = 576px");
+      console.warn("- Height: 4 rows x 64px = 256px");
+      
+      // Calculate max usable frames
+      const usableWidth = completeFrames * frameWidth;
+      console.log(`Usable width: ${usableWidth}px (${completeFrames} frames)`);
+      
+      // This is still usable, just with fewer frames
+      console.log("This sheet is still usable with adaptations.");
+    }
+    
+    return true;
+  };
+  
+  // Helper function to test a sprite sheet
+  window.testSpriteSheet = function(path) {
+    const img = new Image();
+    img.onload = function() {
+      console.log(`Loaded sprite sheet: ${path}`);
+      window.validateSpriteSheet(img);
+    };
+    img.onerror = function() {
+      console.error(`Failed to load sprite sheet: ${path}`);
+    };
+    img.src = path;
+    return img;
+  };
   
   // This would typically be in separate files, imported via <script> tags:
   // - client/js/rendering/Renderer.js

@@ -41,9 +41,8 @@ class TextureManager {
   
   /**
    * Load all game textures
-   * @param {Function} callback - Optional callback when all textures are loaded
    */
-  loadTextures(callback) {
+  loadTextures() {
     try {
       console.log("Loading textures...");
       
@@ -62,177 +61,37 @@ class TextureManager {
       // Load projectile textures
       this.loadProjectileTextures();
       
+      // Load player textures
+      if (CONFIG.USE_SPRITE_SHEETS) {
+        this.preloadClassSpritesheets();
+      } else {
+        this.loadPlayerTextures();
+      }
+      
       // Load monster textures
       this.loadMonsterTextures();
       
-      // Load player textures
-      if (CONFIG.USE_SPRITE_SHEETS) {
-        // When using sprite sheets, we need to preload them properly
-        // and execute callback when loading completes
-        this.preloadClassSpritesheets(() => {
-          console.log("Sprite sheets preloaded, textures loading complete");
-          if (typeof callback === 'function') {
-            callback();
-          }
-        });
-      } else {
-        // For simple colored rectangles, we can load synchronously
-        this.loadPlayerTextures();
-        
-        console.log("Textures loaded successfully");
-        if (typeof callback === 'function') {
-          callback();
-        }
-      }
-      
+      console.log("Textures loaded successfully");
       return true;
     } catch (error) {
       console.error("Error loading textures:", error);
-      if (typeof callback === 'function') {
-        callback(error);
-      }
       return false;
     }
   }
   
   /**
    * Preload all character class sprite sheets
-   * @param {Function} callback - Optional callback when all textures are loaded
    */
-  preloadClassSpritesheets(callback) {
+  preloadClassSpritesheets() {
     console.log("Preloading character sprite sheets...");
     
-    // Track loading status for debugging
-    const loadingStatus = {
-      started: Date.now(),
-      classes: ['warrior', 'mage', 'ranger'],
-      completed: 0,
-      errors: 0,
-      details: {}
-    };
+    // List of character classes
+    const classes = ['warrior', 'mage', 'ranger'];
     
-    // Log loading status every second if taking too long
-    const statusInterval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - loadingStatus.started) / 1000);
-      if (elapsed > 3) { // Only log if taking more than 3 seconds
-        console.log(`Sprite sheet loading in progress (${elapsed}s elapsed)...`);
-        console.log(`- Completed: ${loadingStatus.completed}/${loadingStatus.classes.length}`);
-        console.log(`- Errors: ${loadingStatus.errors}`);
-        console.log("Status:", loadingStatus.details);
-      }
-    }, 1000);
-    
-    // Helper to finish loading process
-    const finishLoading = (success = true) => {
-      clearInterval(statusInterval);
-      
-      const elapsed = Math.floor((Date.now() - loadingStatus.started) / 1000);
-      console.log(`Sprite sheet loading ${success ? 'completed' : 'failed'} in ${elapsed}s`);
-      console.log(`- Completed: ${loadingStatus.completed}/${loadingStatus.classes.length}`);
-      console.log(`- Errors: ${loadingStatus.errors}`);
-      
-      if (typeof callback === 'function') {
-        callback();
-      }
-    };
-    
-    if (window.PIXI && PIXI.Loader) {
-      // Use PIXI's loader for proper preloading
-      const loader = new PIXI.Loader();
-      
-      // Add all sprite sheets to the loader
-      loadingStatus.classes.forEach(className => {
-        const spriteSheetPath = `assets/sprites/characters/${className}.png`;
-        loader.add(className, spriteSheetPath);
-        loadingStatus.details[className] = { status: 'pending' };
-      });
-      
-      // Start loading
-      loader.load((loader, resources) => {
-        console.log("PIXI Loader completed");
-        
-        // Process each loaded resource
-        loadingStatus.classes.forEach(className => {
-          if (resources[className] && resources[className].texture) {
-            console.log(`Processing loaded sprite sheet for ${className}`);
-            loadingStatus.details[className].status = 'processing';
-            
-            try {
-              // Process using the loaded texture
-              this.processClassSpriteSheet(
-                className, 
-                resources[className].texture.baseTexture,
-                576, 
-                256
-              );
-              loadingStatus.completed++;
-              loadingStatus.details[className].status = 'complete';
-            } catch (err) {
-              console.error(`Error processing ${className} sprite sheet:`, err);
-              loadingStatus.errors++;
-              loadingStatus.details[className].status = 'error';
-              loadingStatus.details[className].error = err.message;
-              
-              // Use fallback
-              this.loadFallbackClassTexture(className);
-            }
-          } else {
-            console.warn(`Failed to load sprite sheet for ${className}, using fallback`);
-            loadingStatus.errors++;
-            loadingStatus.details[className].status = 'failed';
-            this.loadFallbackClassTexture(className);
-          }
-        });
-        
-        // Complete the loading process
-        finishLoading(loadingStatus.errors === 0);
-      });
-      
-      // Handle loading progress
-      loader.onProgress.add((loader) => {
-        console.log(`Loading progress: ${Math.round(loader.progress)}%`);
-      });
-      
-      // Handle loading errors
-      loader.onError.add((error, loader, resource) => {
-        console.error("Error loading sprite sheet:", error, resource);
-        
-        // Get the class name from the resource name
-        if (resource && resource.name && loadingStatus.classes.includes(resource.name)) {
-          loadingStatus.errors++;
-          loadingStatus.details[resource.name] = { 
-            status: 'error',
-            error: error.message || 'Unknown error'
-          };
-          this.loadFallbackClassTexture(resource.name);
-        }
-      });
-    } else {
-      // Fallback to the old way if PIXI.Loader is not available
-      console.log("PIXI.Loader not available, using direct loading");
-      
-      // Track how many classes have been processed
-      let processed = 0;
-      
-      loadingStatus.classes.forEach(className => {
-        loadingStatus.details[className] = { status: 'loading' };
-        
-        try {
-          this.loadClassSpriteSheet(className);
-          loadingStatus.completed++;
-          loadingStatus.details[className].status = 'complete';
-        } catch (err) {
-          loadingStatus.errors++;
-          loadingStatus.details[className].status = 'error';
-          loadingStatus.details[className].error = err.message;
-        }
-        
-        processed++;
-        if (processed >= loadingStatus.classes.length) {
-          finishLoading(loadingStatus.errors === 0);
-        }
-      });
-    }
+    // Preload each class sprite sheet
+    classes.forEach(className => {
+      this.loadClassSpriteSheet(className);
+    });
   }
   
   /**
@@ -301,59 +160,36 @@ class TextureManager {
    */
   loadClassSpriteSheet(className, path) {
     try {
-      // Force dimensions since we know what they should be
-      const sheetWidth = 576;  // Fixed sprite sheet width
-      const sheetHeight = 256; // Fixed sprite sheet height
-      
       // Path can be either a string path to an image or a preloaded PIXI.Texture
       let baseTexture;
       
       if (typeof path === 'string') {
         // Construct sprite sheet path
         const sheetPath = path.includes('/') ? path : `assets/sprites/characters/${className}.png`;
-        
-        // Create base texture with proper loading handling
         baseTexture = PIXI.BaseTexture.from(sheetPath);
-        
-        // Check if texture is loaded
-        if (!baseTexture.valid) {
-          console.log(`Texture for ${className} not yet loaded, setting up load event`);
-          
-          // Create fallback texture now (will be replaced when loaded)
-          this.loadFallbackClassTexture(className);
-          
-          // Set up event listener for when texture loads
-          baseTexture.once('loaded', () => {
-            console.log(`Texture for ${className} now loaded (${baseTexture.width}x${baseTexture.height}), processing frames`);
-            this.processClassSpriteSheet(className, baseTexture, sheetWidth, sheetHeight);
-          });
-          
-          // If there's an error loading the texture, use fallback
-          baseTexture.once('error', (err) => {
-            console.error(`Error loading texture for ${className}:`, err);
-            // Fallback already created above
-          });
-          
-          // Return early - we'll process when the texture loads
-          return;
-        } else {
-          console.log(`Texture for ${className} already loaded (${baseTexture.width}x${baseTexture.height})`);
-        }
       } else if (path instanceof PIXI.Texture) {
         baseTexture = path.baseTexture;
-        if (!baseTexture.valid) {
-          console.warn(`Provided texture for ${className} is not valid`);
-          // Create fallback and return
-          this.loadFallbackClassTexture(className);
-          return;
-        }
       } else {
         throw new Error(`Invalid path type for sprite sheet: ${typeof path}`);
       }
       
-      // Process the sprite sheet if we have a valid texture
-      this.processClassSpriteSheet(className, baseTexture, sheetWidth, sheetHeight);
-      
+      // Wait for the base texture to load if it's not ready yet
+      if (!baseTexture.valid) {
+        console.log(`Waiting for ${className} texture to load...`);
+        baseTexture.once('loaded', () => {
+          console.log(`${className} texture loaded, now processing frames...`);
+          this.processClassSpriteSheet(className, baseTexture);
+        });
+        
+        // Also handle failure case
+        baseTexture.once('error', (err) => {
+          console.error(`Failed to load sprite sheet for ${className}:`, err);
+          this.loadFallbackClassTexture(className);
+        });
+      } else {
+        // Texture is already loaded, process immediately
+        this.processClassSpriteSheet(className, baseTexture);
+      }
     } catch (error) {
       console.error(`Error loading sprite sheet for class ${className}:`, error);
       // Fall back to colored rectangles
@@ -362,24 +198,31 @@ class TextureManager {
   }
   
   /**
-   * Process a loaded sprite sheet into animation frames
+   * Process a loaded sprite sheet
    * @param {string} className - Class name
    * @param {PIXI.BaseTexture} baseTexture - The loaded base texture
-   * @param {number} sheetWidth - Width of the sprite sheet
-   * @param {number} sheetHeight - Height of the sprite sheet
    */
-  processClassSpriteSheet(className, baseTexture, sheetWidth, sheetHeight) {
+  processClassSpriteSheet(className, baseTexture) {
     try {
-      // If baseTexture dimensions are 0, use our predefined dimensions
-      const actualWidth = baseTexture.width || sheetWidth;
-      const actualHeight = baseTexture.height || sheetHeight;
+      // Get actual sprite sheet dimensions
+      const sheetWidth = baseTexture.width;
+      const sheetHeight = baseTexture.height;
       
-      console.log(`Processing sprite sheet for ${className} (${actualWidth}x${actualHeight})`);
+      console.log(`Processing ${className} sprite sheet: ${sheetWidth}x${sheetHeight}`);
       
-      // Individual frame dimensions
-      // The sheet is 9 columns x 4 rows
-      const frameWidth = actualWidth / 9;  // 64px per frame for 576px width
-      const frameHeight = actualHeight / 4; // 64px per frame for 256px height
+      // We know there are 4 rows (directions) and up to 9 frames per direction
+      const rows = 4; // up, left, down, right
+      const maxCols = 9; // maximum potential columns
+      
+      // Calculate frame dimensions based on actual sheet size and expected layout
+      const frameHeight = Math.floor(sheetHeight / rows);
+      const frameWidth = Math.floor(sheetWidth / maxCols);
+      
+      // Determine how many usable frames we have per row
+      // Don't try to use more frames than can fit in the texture width
+      const framesPerRow = Math.min(Math.floor(sheetWidth / frameWidth), maxCols - 1);
+      
+      console.log(`Frame size: ${frameWidth}x${frameHeight}, frames per row: ${framesPerRow}`);
       
       // Animation frames by direction
       const frames = {
@@ -396,10 +239,10 @@ class TextureManager {
       // Row 2: Down animations
       // Row 3: Right animations
       
-      // Number of animation frames to extract per row
-      const framesPerAnimation = 8; // Using 8 frames for animation, leaving 1 frame unused
-      
-      for (let col = 0; col < framesPerAnimation; col++) {
+      for (let col = 0; col < framesPerRow; col++) {
+        // Don't exceed the sheet width
+        if ((col + 1) * frameWidth > sheetWidth) break;
+        
         // Up animations (row 0)
         frames.up.push(
           new PIXI.Texture(
@@ -433,17 +276,24 @@ class TextureManager {
         );
       }
       
+      // Make sure we have at least one frame for each direction
+      // If no frames were created, fall back to defaults
+      if (frames.down.length === 0) {
+        this.loadFallbackClassTexture(className);
+        return;
+      }
+      
       // Set default frame to the first frame of the down animation
       frames.default = frames.down[0];
       
       // Store frames by class name in the TextureManager
       this.playerTextures[className] = frames;
       
-      console.log(`Successfully processed sprite sheet for ${className} (${framesPerAnimation} frames per direction)`);
+      console.log(`Successfully processed sprite sheet for ${className}: ${frames.down.length} frames per direction`);
       
     } catch (error) {
-      console.error(`Error processing sprite sheet for ${className}:`, error);
-      // Fall back to colored rectangles if processing fails
+      console.error(`Error processing sprite sheet for class ${className}:`, error);
+      // Fall back to colored rectangles
       this.loadFallbackClassTexture(className);
     }
   }

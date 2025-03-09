@@ -96,6 +96,36 @@ class EntityRenderer {
       // Get textures for this character class from the TextureManager
       const textures = this.renderer.textureManager.getPlayerTextures(charClass);
       
+      // Debug information about sprite textures
+      if (CONFIG.SPRITE_SHEET_DEBUG && isLocalPlayer && !this._debugLogged) {
+        console.group('Sprite Sheet Debug Info');
+        console.log(`Class: ${charClass}`);
+        console.log(`Directions available:`, Object.keys(textures));
+        
+        // Log dimensions of one frame
+        if (textures.down && textures.down[0]) {
+          const frame = textures.down[0].frame;
+          console.log(`Frame dimensions: ${frame.width}x${frame.height}`);
+          console.log(`Frame position: (${frame.x}, ${frame.y})`);
+          console.log(`Total frames:`, {
+            'up': textures.up?.length || 0,
+            'down': textures.down?.length || 0,
+            'left': textures.left?.length || 0,
+            'right': textures.right?.length || 0
+          });
+          
+          // Log base texture dimensions if available
+          const baseTexture = textures.down[0].baseTexture;
+          if (baseTexture) {
+            console.log(`Base texture dimensions: ${baseTexture.width}x${baseTexture.height}`);
+            console.log(`Base texture URL:`, baseTexture.cacheId);
+          }
+        }
+        
+        console.groupEnd();
+        this._debugLogged = true;
+      }
+      
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);
       
