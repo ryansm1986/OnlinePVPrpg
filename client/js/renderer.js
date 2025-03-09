@@ -437,11 +437,11 @@ class Renderer {
     
     // Load warrior texture
     const warriorPath = '/assets/classes/warrior/warriorsprite.png';
-    this.loadClassTexture('warrior', warriorPath);
+    this.loadClassTextureWithAnimation('warrior', warriorPath);
     
     // Load mage texture
     const magePath = '/assets/classes/mage/magesprite.png';
-    this.loadClassTexture('mage', magePath);
+    this.loadClassTextureWithAnimation('mage', magePath);
     
     // Load ranger texture - use the path from client assets (correct path)
     const rangerPath = '/assets/classes/ranger/rangersprite.png';
@@ -584,7 +584,7 @@ class Renderer {
       const spritesheetWidth = baseTexture.width;
       const spritesheetHeight = baseTexture.height;
       
-      console.log(`${className} sprite dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
+      console.log(`${className} sprite dimensions: ${spritesheetWidth}x${spritesheetHeight}. baseTexture.width: ${baseTexture.width} and baseTexture.height: ${baseTexture.height}`);
       
       // Create frames object with default structure
       const frames = {
@@ -610,8 +610,8 @@ class Renderer {
       } else {
         // For larger spritesheets, extract animation frames
         // Typically 16x16 pixel frames arranged in a grid
-        const frameWidth = 16;
-        const frameHeight = 16;
+        const frameWidth = 64;
+        const frameHeight = 64;
         
         // Calculate rows and columns in the sheet
         const cols = Math.floor(spritesheetWidth / frameWidth);

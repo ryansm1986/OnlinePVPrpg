@@ -49,8 +49,9 @@ class Renderer {
   
   /**
    * Initialize the renderer
+   * @param {Function} callback - Optional callback when initialization is complete
    */
-  init() {
+  init(callback) {
     try {
       // Create PixiJS application
       this.app = new PIXI.Application({
@@ -63,28 +64,42 @@ class Renderer {
       // Add canvas to document
       document.getElementById('game-container').appendChild(this.app.view);
       
-      // Initialize subsystems
+      // Create containers first so we have layers for textures
       this.createContainers();
-      this.textureManager.loadTextures();
-      this.terrainRenderer.init();
-      this.uiRenderer.init();
-      this.minimapRenderer.init();
       
-      // Set up animation cleanup
-      this.animationManager.setupAnimationCleanup();
-      
-      // Start render loop
-      this.app.ticker.add(this.render);
-      
-      // Handle window resizing
-      window.addEventListener('resize', this.resize);
-      this.resize();
-      
-      console.log("Renderer initialized successfully");
+      // Load textures asynchronously
+      this.textureManager.loadTextures(() => {
+        console.log("Textures loaded, initializing subsystems...");
+        
+        // Initialize terrain after textures are loaded
+        this.terrainRenderer.init();
+        this.uiRenderer.init();
+        this.minimapRenderer.init();
+        
+        // Set up animation cleanup
+        this.animationManager.setupAnimationCleanup();
+        
+        // Start render loop
+        this.app.ticker.add(this.render);
+        
+        // Handle window resizing
+        window.addEventListener('resize', this.resize);
+        this.resize();
+        
+        console.log("Renderer initialized successfully");
+        
+        // Execute callback if provided
+        if (typeof callback === 'function') {
+          callback();
+        }
+      });
       
       return true;
     } catch (error) {
       console.error("Failed to initialize renderer:", error);
+      if (typeof callback === 'function') {
+        callback(error);
+      }
       return false;
     }
   }
