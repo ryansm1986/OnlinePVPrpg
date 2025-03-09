@@ -113,8 +113,9 @@ class Game {
   
   /**
    * Initialize the game
+   * @param {Function} callback - Optional callback function to call when initialization is complete
    */
-  init() {
+  init(callback) {
     try {
       // Create game systems with proper error handling
       try {
@@ -124,7 +125,10 @@ class Game {
         console.error("Failed to create Renderer:", rendererError);
         // Create a minimal renderer stub to prevent null references
         this.renderer = {
-          init: function() { console.log("Stub renderer init called"); },
+          init: function(cb) { 
+            console.log("Stub renderer init called");
+            if (typeof cb === 'function') cb();
+          },
           render: function() { console.log("Stub renderer render called"); }
         };
       }
@@ -134,69 +138,59 @@ class Game {
       this.input = new Input(this);
       this.ui = new UI(this);
       
-      // Try to initialize systems
+      // Try to initialize systems - renderer has async initialization now
       try {
-        this.renderer.init();
-        this.network.init();
-        this.input.init();
-        this.ui.init();
-        
-        // Set up event listeners
-        console.log("Setting up event listeners...");
-        this.setupEventListeners();
-        
-        // Start the game loop
-        this.lastUpdateTime = performance.now();
-        requestAnimationFrame(this.update);
-        
-        // Mark game as running
-        this.isRunning = true;
-        
-        // Start memory monitoring
-        if (this.memoryMonitoring.enabled) {
-          // Initial memory check
-          this.monitorMemory();
+        // Initialize renderer with callback for when textures are loaded
+        this.renderer.init(() => {
+          console.log("Renderer initialization complete, initializing other subsystems...");
           
-          // Set up periodic memory monitoring
-          this.memoryMonitoring.interval = setInterval(this.monitorMemory, this.memoryMonitoring.intervalTime);
-          console.log(`Memory monitoring started (interval: ${this.memoryMonitoring.intervalTime}ms)`);
-        }
-        
-        // Load assets and show character selection screen
-        console.log("Starting asset loading...");
-        this.loadAssets();
-        
-        // Debug message
-        console.log("Game initialized successfully!");
+          // Initialize other systems after renderer is ready
+          this.network.init();
+          this.input.init();
+          this.ui.init();
+          
+          // Set up event listeners
+          console.log("Setting up event listeners...");
+          this.setupEventListeners();
+          
+          // Start the game loop
+          this.lastUpdateTime = performance.now();
+          requestAnimationFrame(this.update);
+          
+          // Start memory monitoring if enabled
+          if (this.memoryMonitoring.enabled) {
+            this.memoryMonitoring.interval = setInterval(this.monitorMemory, this.memoryMonitoring.intervalTime);
+            console.log("Memory monitoring enabled");
+          }
+          
+          // Setup UI screens
+          this.ui.showLoadingScreen(false);
+          this.ui.showCharacterSelect(true);
+          
+          // Set initial game state
+          this.isRunning = true;
+          console.log("Game initialized successfully");
+          
+          // Call the callback function if provided
+          if (typeof callback === 'function') {
+            callback();
+          }
+        });
       } catch (initError) {
-        console.error("Error during initialization:", initError);
-        throw new Error("Failed to initialize game systems");
+        console.error("Error initializing systems:", initError);
+        
+        // Call the callback with the error
+        if (typeof callback === 'function') {
+          callback(initError);
+        }
       }
     } catch (error) {
       console.error("Critical error during game initialization:", error);
+      this.showErrorMessage("Game initialization failed. Please refresh the page and try again.");
       
-      // Safely show error to user, using multiple fallbacks
-      try {
-        // Try UI error first
-        if (this.ui && typeof this.ui.showError === 'function') {
-          this.ui.showError(error.message || "Game initialization failed");
-        } else {
-          // Try direct DOM manipulation
-          const errorMessage = document.getElementById('error-message');
-          const errorOverlay = document.getElementById('error-overlay');
-          
-          if (errorMessage && errorOverlay) {
-            errorMessage.textContent = error.message || "Game initialization failed";
-            errorOverlay.classList.remove('hidden');
-          } else {
-            // Last resort: alert
-            alert("Game initialization failed: " + (error.message || "Unknown error"));
-          }
-        }
-      } catch (displayError) {
-        // Absolutely last resort
-        console.error("Failed to display error:", displayError);
-        alert("Critical error occurred. Please check console for details.");
+      // Call the callback with the error
+      if (typeof callback === 'function') {
+        callback(error);
       }
     }
   }
@@ -1297,6 +1291,39 @@ class Game {
       console.log("Game resources cleaned up successfully");
     } catch (error) {
       console.error("Error during game shutdown:", error);
+    }
+  }
+  
+  /**
+   * Display an error message to the user
+   * @param {string} message - The error message to display
+   */
+  showErrorMessage(message) {
+    // Try multiple ways to show the error to ensure user sees it
+    try {
+      // Try UI error first if available
+      if (this.ui && typeof this.ui.showError === 'function') {
+        this.ui.showError(message || "An error occurred");
+        return;
+      }
+      
+      // Try direct DOM manipulation
+      const errorMessage = document.getElementById('error-message');
+      const errorOverlay = document.getElementById('error-overlay');
+      
+      if (errorMessage && errorOverlay) {
+        errorMessage.textContent = message || "An error occurred";
+        errorOverlay.classList.remove('hidden');
+        return;
+      }
+      
+      // Last resort: alert
+      alert(message || "An error occurred");
+      
+    } catch (displayError) {
+      // Absolutely last resort
+      console.error("Failed to display error:", displayError);
+      alert("Critical error occurred. Please check console for details.");
     }
   }
 } 

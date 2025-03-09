@@ -794,4 +794,63 @@ class UI {
       }
     }
   }
+  
+  /**
+   * Show or hide the loading screen
+   * @param {boolean} show - Whether to show or hide the loading screen
+   * @param {string} message - Optional message to display
+   */
+  showLoadingScreen(show, message = 'Loading...') {
+    try {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (!loadingScreen) return;
+      
+      const loadingText = loadingScreen.querySelector('.loading-text');
+      if (loadingText && message) {
+        loadingText.textContent = message;
+      }
+      
+      if (show) {
+        loadingScreen.classList.remove('hidden');
+        console.log("Loading screen displayed:", message);
+      } else {
+        loadingScreen.classList.add('hidden');
+        console.log("Loading screen hidden");
+      }
+    } catch (error) {
+      console.error("Error toggling loading screen:", error);
+    }
+  }
+  
+  /**
+   * Show or hide the character selection screen
+   * @param {boolean} show - Whether to show or hide the character selection
+   */
+  showCharacterSelect(show) {
+    try {
+      const characterSelect = document.getElementById('character-select');
+      if (!characterSelect) {
+        console.warn("Character select element not found");
+        return;
+      }
+      
+      if (show) {
+        characterSelect.classList.remove('hidden');
+        console.log("Character selection screen displayed");
+        
+        // Focus the name input field for better UX
+        const nameInput = document.getElementById('player-name');
+        if (nameInput) {
+          setTimeout(() => {
+            nameInput.focus();
+          }, 100);
+        }
+      } else {
+        characterSelect.classList.add('hidden');
+        console.log("Character selection screen hidden");
+      }
+    } catch (error) {
+      console.error("Error toggling character select screen:", error);
+    }
+  }
 } 

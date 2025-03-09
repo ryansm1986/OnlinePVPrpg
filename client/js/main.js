@@ -5,23 +5,44 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     console.log("DOM content loaded, initializing game...");
     
+    // Get loading indicator reference
+    const loadingElement = document.getElementById('loading-indicator');
+    
+    // Function to show loading indicator
+    const showLoading = () => {
+      if (loadingElement) {
+        loadingElement.style.display = 'flex';
+        console.log("Loading indicator displayed");
+      }
+    };
+    
+    // Function to hide loading indicator
+    const hideLoading = () => {
+      if (loadingElement) {
+        loadingElement.style.display = 'none';
+        console.log("Loading indicator hidden");
+      }
+    };
+    
+    // Show loading indicator
+    showLoading();
+    
+    // Safety timeout to hide loading indicator if something goes wrong
+    const loadingTimeout = setTimeout(() => {
+      console.warn("Loading timeout reached (15s), hiding loading indicator");
+      hideLoading();
+    }, 15000);
+    
     // Create and initialize the game
     window.game = new Game();
     
-    // Show loading indicator
-    const loadingElement = document.getElementById('loading-indicator');
-    if (loadingElement) {
-      loadingElement.style.display = 'flex';
-    } else {
-      console.log("Loading game assets...");
-    }
-    
     // Initialize the game with a callback for when it's ready
     window.game.init((error) => {
+      // Clear the safety timeout
+      clearTimeout(loadingTimeout);
+      
       // Hide loading indicator
-      if (loadingElement) {
-        loadingElement.style.display = 'none';
-      }
+      hideLoading();
       
       if (error) {
         console.error("Game initialization error:", error);

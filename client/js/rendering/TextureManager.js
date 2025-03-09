@@ -102,44 +102,95 @@ class TextureManager {
   preloadClassSpritesheets(callback) {
     console.log("Preloading character sprite sheets...");
     
-    // List of character classes
-    const classes = ['warrior', 'mage', 'ranger'];
+    // Track loading status for debugging
+    const loadingStatus = {
+      started: Date.now(),
+      classes: ['warrior', 'mage', 'ranger'],
+      completed: 0,
+      errors: 0,
+      details: {}
+    };
+    
+    // Log loading status every second if taking too long
+    const statusInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - loadingStatus.started) / 1000);
+      if (elapsed > 3) { // Only log if taking more than 3 seconds
+        console.log(`Sprite sheet loading in progress (${elapsed}s elapsed)...`);
+        console.log(`- Completed: ${loadingStatus.completed}/${loadingStatus.classes.length}`);
+        console.log(`- Errors: ${loadingStatus.errors}`);
+        console.log("Status:", loadingStatus.details);
+      }
+    }, 1000);
+    
+    // Helper to finish loading process
+    const finishLoading = (success = true) => {
+      clearInterval(statusInterval);
+      
+      const elapsed = Math.floor((Date.now() - loadingStatus.started) / 1000);
+      console.log(`Sprite sheet loading ${success ? 'completed' : 'failed'} in ${elapsed}s`);
+      console.log(`- Completed: ${loadingStatus.completed}/${loadingStatus.classes.length}`);
+      console.log(`- Errors: ${loadingStatus.errors}`);
+      
+      if (typeof callback === 'function') {
+        callback();
+      }
+    };
     
     if (window.PIXI && PIXI.Loader) {
       // Use PIXI's loader for proper preloading
       const loader = new PIXI.Loader();
       
       // Add all sprite sheets to the loader
-      classes.forEach(className => {
+      loadingStatus.classes.forEach(className => {
         const spriteSheetPath = `assets/sprites/characters/${className}.png`;
         loader.add(className, spriteSheetPath);
+        loadingStatus.details[className] = { status: 'pending' };
       });
       
       // Start loading
       loader.load((loader, resources) => {
-        console.log("All sprite sheets loaded successfully");
+        console.log("PIXI Loader completed");
         
         // Process each loaded resource
-        classes.forEach(className => {
+        loadingStatus.classes.forEach(className => {
           if (resources[className] && resources[className].texture) {
             console.log(`Processing loaded sprite sheet for ${className}`);
-            // Process using the loaded texture
-            this.processClassSpriteSheet(
-              className, 
-              resources[className].texture.baseTexture,
-              576, 
-              256
-            );
+            loadingStatus.details[className].status = 'processing';
+            
+            try {
+              // Process using the loaded texture
+              this.processClassSpriteSheet(
+                className, 
+                resources[className].texture.baseTexture,
+                576, 
+                256
+              );
+              loadingStatus.completed++;
+              loadingStatus.details[className].status = 'complete';
+            } catch (err) {
+              console.error(`Error processing ${className} sprite sheet:`, err);
+              loadingStatus.errors++;
+              loadingStatus.details[className].status = 'error';
+              loadingStatus.details[className].error = err.message;
+              
+              // Use fallback
+              this.loadFallbackClassTexture(className);
+            }
           } else {
             console.warn(`Failed to load sprite sheet for ${className}, using fallback`);
+            loadingStatus.errors++;
+            loadingStatus.details[className].status = 'failed';
             this.loadFallbackClassTexture(className);
           }
         });
         
-        // Execute callback if provided
-        if (typeof callback === 'function') {
-          callback();
-        }
+        // Complete the loading process
+        finishLoading(loadingStatus.errors === 0);
+      });
+      
+      // Handle loading progress
+      loader.onProgress.add((loader) => {
+        console.log(`Loading progress: ${Math.round(loader.progress)}%`);
       });
       
       // Handle loading errors
@@ -147,20 +198,40 @@ class TextureManager {
         console.error("Error loading sprite sheet:", error, resource);
         
         // Get the class name from the resource name
-        if (resource && resource.name && classes.includes(resource.name)) {
+        if (resource && resource.name && loadingStatus.classes.includes(resource.name)) {
+          loadingStatus.errors++;
+          loadingStatus.details[resource.name] = { 
+            status: 'error',
+            error: error.message || 'Unknown error'
+          };
           this.loadFallbackClassTexture(resource.name);
         }
       });
     } else {
       // Fallback to the old way if PIXI.Loader is not available
-      classes.forEach(className => {
-        this.loadClassSpriteSheet(className);
-      });
+      console.log("PIXI.Loader not available, using direct loading");
       
-      // Execute callback immediately since we're not really preloading
-      if (typeof callback === 'function') {
-        setTimeout(callback, 100);
-      }
+      // Track how many classes have been processed
+      let processed = 0;
+      
+      loadingStatus.classes.forEach(className => {
+        loadingStatus.details[className] = { status: 'loading' };
+        
+        try {
+          this.loadClassSpriteSheet(className);
+          loadingStatus.completed++;
+          loadingStatus.details[className].status = 'complete';
+        } catch (err) {
+          loadingStatus.errors++;
+          loadingStatus.details[className].status = 'error';
+          loadingStatus.details[className].error = err.message;
+        }
+        
+        processed++;
+        if (processed >= loadingStatus.classes.length) {
+          finishLoading(loadingStatus.errors === 0);
+        }
+      });
     }
   }
   
