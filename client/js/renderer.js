@@ -205,19 +205,23 @@ class Renderer {
       const expired = [];
       
       // Find expired animations
-      this.activeAnimations.forEach((animation, id) => {
-        if (now - animation.startTime > animation.maxAge) {
-          expired.push(id);
+      for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+        const anim = this.activeAnimations[i];
+        if (now - anim.startTime > anim.maxAge) {
+          expired.push(anim);
+          this.activeAnimations.splice(i, 1);
         }
-      });
+      }
       
-      // Remove expired animations
-      expired.forEach(id => {
-        const animation = this.activeAnimations.get(id);
-        if (animation && animation.cleanup) {
-          animation.cleanup();
+      // Force cleanup of expired animations
+      expired.forEach(anim => {
+        if (anim.animation && anim.animation.cleanup && typeof anim.animation.cleanup === 'function') {
+          try {
+            anim.animation.cleanup();
+          } catch (e) {
+            console.error("Error cleaning up animation:", e);
+          }
         }
-        this.activeAnimations.delete(id);
       });
     } catch (error) {
       console.error("Error cleaning up animations:", error);
