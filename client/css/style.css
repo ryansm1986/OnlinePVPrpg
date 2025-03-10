@@ -661,4 +661,29 @@ canvas {
   color: #aaa;
   margin-top: 5px;
   font-style: italic;
+}
+
+#debug-overlay {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1000;
+}
+
+#spawn-skeleton-btn {
+  background-color: #ff5f5f;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+#spawn-skeleton-btn:hover {
+  background-color: #ff3131;
 } 

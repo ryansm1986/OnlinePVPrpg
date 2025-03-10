@@ -3129,6 +3129,8 @@ class Renderer {
    * Load skeleton animations from sprite sheets
    */
   loadSkeletonAnimations() {
+    console.log("Loading skeleton animations...");
+    
     // Initialize monster animation textures object if it doesn't exist
     if (!this.textures.monsterAnimations) {
       this.textures.monsterAnimations = {};
@@ -3153,20 +3155,33 @@ class Renderer {
     
     // Load walk animations
     const walkPath = '/assets/monsters/skeleton_walk.png';
+    console.log("Loading skeleton walk animation from:", walkPath);
     const walkBaseTexture = PIXI.BaseTexture.from(walkPath);
     
     // Load attack animations
     const attackPath = '/assets/monsters/skeleton_attack.png';
+    console.log("Loading skeleton attack animation from:", attackPath);
     const attackBaseTexture = PIXI.BaseTexture.from(attackPath);
     
     // Process walk sprite sheet when loaded
     walkBaseTexture.once('loaded', () => {
+      console.log("Skeleton walk sprite sheet loaded successfully");
       this.processSkeletonSpriteSheet(walkBaseTexture, 'walk');
     });
     
     // Process attack sprite sheet when loaded
     attackBaseTexture.once('loaded', () => {
+      console.log("Skeleton attack sprite sheet loaded successfully");
       this.processSkeletonSpriteSheet(attackBaseTexture, 'attack');
+    });
+    
+    // Add error handlers for both textures
+    walkBaseTexture.once('error', (error) => {
+      console.error("Failed to load skeleton walk texture:", error);
+    });
+    
+    attackBaseTexture.once('error', (error) => {
+      console.error("Failed to load skeleton attack texture:", error);
     });
     
     // Set a simple fallback in case loading fails
@@ -3179,9 +3194,13 @@ class Renderer {
    * @param {string} animationType - Either 'walk' or 'attack'
    */
   processSkeletonSpriteSheet(baseTexture, animationType) {
+    console.log(`Processing ${animationType} skeleton sprite sheet...`);
+    
     // Get dimensions
     const sheetWidth = baseTexture.width;
     const sheetHeight = baseTexture.height;
+    
+    console.log(`Sprite sheet dimensions: ${sheetWidth}x${sheetHeight}`);
     
     // Determine number of frames based on animation type
     // For skeleton_walk.png: 9 frames, 4 directions
@@ -3192,6 +3211,8 @@ class Renderer {
     // Calculate frame dimensions
     const frameWidth = Math.floor(sheetWidth / numCols);
     const frameHeight = Math.floor(sheetHeight / numRows);
+    
+    console.log(`Frame dimensions: ${frameWidth}x${frameHeight}, Grid: ${numRows}x${numCols}`);
     
     // Direction mapping (standard RPG spritesheet layout):
     // Row 0: Down
@@ -3216,13 +3237,18 @@ class Renderer {
         // Add to appropriate animation collection
         this.textures.monsterAnimations.skeleton[animationType][direction].push(texture);
       }
+      
+      console.log(`Extracted ${numCols} frames for ${direction} ${animationType} animation`);
     }
     
     // Set default texture (first frame of down walk animation)
     if (animationType === 'walk' && this.textures.monsterAnimations.skeleton.walk.down.length > 0) {
       this.textures.monster.skeleton = this.textures.monsterAnimations.skeleton.walk.down[0];
       this.textures.monsterAnimations.skeleton.default = this.textures.monsterAnimations.skeleton.walk.down[0];
+      console.log("Set default skeleton texture");
     }
+    
+    console.log(`Finished processing ${animationType} skeleton sprite sheet`);
   }
 
   /**

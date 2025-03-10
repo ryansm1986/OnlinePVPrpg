@@ -1362,11 +1362,9 @@ class Game {
     // Log world initialization
     console.log("World data initialized - Width:", this.world.width, "Height:", this.world.height);
     
-    // Set a timeout to ensure the terrain features are generated before spawning skeletons
-    setTimeout(() => {
-      // Spawn some skeleton monsters around the map
-      this.spawnSkeletons(10); // Spawn 10 skeletons
-    }, 1000);
+    // Force immediate spawning of skeletons 
+    console.log("Spawning skeletons immediately after world initialization");
+    this.spawnSkeletons(10); // Spawn 10 skeletons
   }
   
   /**
@@ -1484,11 +1482,20 @@ class Game {
    * @param {number} count - Number of skeletons to spawn
    */
   spawnSkeletons(count = 5) {
+    console.log("Attempting to spawn", count, "skeletons...");
+    
     // Skip if renderer doesn't have terrain features (world may not be initialized)
-    if (!this.renderer || !this.renderer.terrainFeatures) {
-      console.warn("Cannot spawn skeletons - world not fully initialized");
+    if (!this.renderer) {
+      console.error("Cannot spawn skeletons - renderer not initialized");
       return;
     }
+    
+    if (!this.renderer.terrainFeatures) {
+      console.error("Cannot spawn skeletons - terrain features not initialized");
+      return;
+    }
+    
+    console.log("Terrain features found:", this.renderer.terrainFeatures.length);
     
     const worldWidth = CONFIG.WORLD_WIDTH;
     const worldHeight = CONFIG.WORLD_HEIGHT;
@@ -1553,7 +1560,7 @@ class Game {
       // Create the skeleton monster
       const skeleton = {
         id: skeletonId,
-        type: 'Skeleton',
+        type: 'skeleton',
         position: { x, y },
         facingDirection: ['down', 'up', 'left', 'right'][Math.floor(Math.random() * 4)],
         health: 50,
@@ -1571,6 +1578,46 @@ class Game {
       console.log(`Spawned skeleton at (${Math.round(x)}, ${Math.round(y)})`);
     }
     
-    console.log(`Spawned ${count} skeletons on the map`);
+    console.log(`Attempted to spawn ${count} skeletons, actual count:`, this.monsters.size);
+  }
+  
+  /**
+   * Spawn a single skeleton at a fixed position for testing
+   * This can be called manually from the console: window.game.spawnTestSkeleton()
+   */
+  spawnTestSkeleton() {
+    console.log("Manually spawning a test skeleton");
+    
+    // Create a unique ID
+    const skeletonId = `test_skeleton_${Date.now()}`;
+    
+    // Create the skeleton at a fixed position near the center of the map
+    const centerX = CONFIG.WORLD_WIDTH / 2;
+    const centerY = CONFIG.WORLD_HEIGHT / 2;
+    
+    // Position slightly offset from center
+    const x = centerX + 100;
+    const y = centerY + 100;
+    
+    // Create the skeleton monster
+    const skeleton = {
+      id: skeletonId,
+      type: 'skeleton',
+      position: { x, y },
+      facingDirection: 'down',
+      health: 50,
+      maxHealth: 50,
+      isAttacking: false,
+      width: 48,
+      height: 48,
+      state: 'idle'
+    };
+    
+    // Create a Monster instance and add it to the monsters map
+    const monsterInstance = new Monster(skeleton);
+    this.monsters.set(skeletonId, monsterInstance);
+    
+    console.log(`Spawned test skeleton at (${Math.round(x)}, ${Math.round(y)})`);
+    return monsterInstance;
   }
 } 
