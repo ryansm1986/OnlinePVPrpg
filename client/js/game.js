@@ -528,97 +528,143 @@ class Game {
     });
     
     // Update monsters
-    for (const id in data.monsters) {
-      const monsterData = data.monsters[id];
-      
-      if (this.monsters.has(id)) {
-        // Update existing monster
-        const monster = this.monsters.get(id);
+    this.monsters.forEach(monster => {
+      if (monster.update) {
+        // Store previous position to restore if collision occurs
+        const prevPosition = { 
+          x: monster.position.x, 
+          y: monster.position.y 
+        };
         
-        // Store current position before updating
-        const prevPosition = { ...monster.position };
+        // Update base monster properties
+        monster.update(this.deltaTime);
         
-        // Update monster data
-        Object.assign(monster, monsterData);
+        // AI: Make monsters move toward nearby players
+        this.updateMonsterAI(monster);
         
-        // Set target position to the new position for interpolation
-        monster.targetPosition = { ...monster.position };
-        
-        // Set current position back to previous position for smooth interpolation
-        monster.position = prevPosition;
-      } else {
-        // Create new monster
-        const monster = new Monster(monsterData);
-        // Initialize targetPosition for newly created monsters
-        monster.targetPosition = { ...monster.position };
-        this.monsters.set(id, monster);
+        // Collision detection to prevent overlapping
+        this.checkMonsterCollisions(monster, prevPosition);
       }
-    }
+    });
     
-    // Process items
-    for (const id in data.items) {
-      const itemData = data.items[id];
-      
-      if (!this.items.has(id)) {
-        // Create new item
-        const item = new Item(itemData);
-        this.items.set(id, item);
-      }
-    }
-    
-    // Add projectiles to players if they exist
-    if (data.projectiles) {
-      // Process player projectiles
-      data.projectiles.forEach(projectileData => {
-        // Find the owner player
-        if (this.player && projectileData.ownerId === this.player.id) {
-          if (!this.player.projectiles) {
-            this.player.projectiles = [];
-          }
-          
-          // Check if projectile already exists locally
-          const existingIdx = this.player.projectiles.findIndex(p => p.id === projectileData.id);
-          
-          if (existingIdx === -1) {
-            // Add new projectile
-            this.player.projectiles.push(projectileData);
-          } else {
-            // Update existing projectile
-            this.player.projectiles[existingIdx] = {
-              ...this.player.projectiles[existingIdx],
-              ...projectileData
-            };
-          }
-        } 
-        else if (this.players.has(projectileData.ownerId)) {
-          const player = this.players.get(projectileData.ownerId);
-          
-          if (!player.projectiles) {
-            player.projectiles = [];
-          }
-          
-          // Check if projectile already exists locally
-          const existingIdx = player.projectiles.findIndex(p => p.id === projectileData.id);
-          
-          if (existingIdx === -1) {
-            // Add new projectile
-            player.projectiles.push(projectileData);
-          } else {
-            // Update existing projectile
-            player.projectiles[existingIdx] = {
-              ...player.projectiles[existingIdx],
-              ...projectileData
-            };
-          }
-        }
-      });
-    }
-    
-    // Clean up expired projectiles
+    // Clean up inactive projectiles to prevent memory buildup
     this.cleanupProjectiles();
+  }
+  
+  /**
+   * Update monster AI to move toward nearby players
+   * @param {Object} monster - The monster to update
+   */
+  updateMonsterAI(monster) {
+    // Skip if monster is dead
+    if (monster.isDead) return;
     
-    // Remove players, monsters, and items that no longer exist
-    this.cleanupEntities(data);
+    // Skip if monster is already attacking
+    if (monster.isAttacking) return;
+    
+    // Find closest player
+    let closestPlayer = null;
+    let closestDistance = Infinity;
+    
+    // Check local player first
+    if (this.player && !this.player.isDead) {
+      const dx = this.player.position.x - monster.position.x;
+      const dy = this.player.position.y - monster.position.y;
+      const distSq = dx * dx + dy * dy;
+      
+      closestPlayer = this.player;
+      closestDistance = distSq;
+    }
+    
+    // Check other players
+    this.players.forEach(player => {
+      if (player === this.player || player.isDead) return;
+      
+      const dx = player.position.x - monster.position.x;
+      const dy = player.position.y - monster.position.y;
+      const distSq = dx * dx + dy * dy;
+      
+      if (distSq < closestDistance) {
+        closestPlayer = player;
+        closestDistance = distSq;
+      }
+    });
+    
+    // Only follow players within a certain range (detection radius)
+    const DETECTION_RADIUS = 200;
+    const FOLLOW_SPEED = 0.3; // Slow movement speed
+    
+    if (closestPlayer && closestDistance < DETECTION_RADIUS * DETECTION_RADIUS) {
+      // Calculate direction to player
+      const dx = closestPlayer.position.x - monster.position.x;
+      const dy = closestPlayer.position.y - monster.position.y;
+      const dist = Math.sqrt(closestDistance);
+      
+      // Normalize direction and apply speed
+      const moveX = (dx / dist) * FOLLOW_SPEED * this.deltaTime / 16;
+      const moveY = (dy / dist) * FOLLOW_SPEED * this.deltaTime / 16;
+      
+      // Update monster's target position for smooth movement
+      monster.targetPosition.x = monster.position.x + moveX;
+      monster.targetPosition.y = monster.position.y + moveY;
+      
+      // Update facing direction
+      if (Math.abs(dx) > Math.abs(dy)) {
+        monster.facingDirection = dx > 0 ? 'right' : 'left';
+      } else {
+        monster.facingDirection = dy > 0 ? 'down' : 'up';
+      }
+    }
+  }
+  
+  /**
+   * Check for collisions between monsters and other entities
+   * @param {Object} monster - The monster to check
+   * @param {Object} prevPosition - The monster's previous position
+   */
+  checkMonsterCollisions(monster, prevPosition) {
+    // Skip if monster is dead
+    if (monster.isDead) return;
+    
+    // Monster collision radius
+    const monsterRadius = monster.width / 2 || 16;
+    
+    // Check collision with terrain
+    this.checkTerrainCollisions(monster, prevPosition);
+    
+    // Check collision with player
+    if (this.player && !this.player.isDead) {
+      const playerRadius = CONFIG.PLAYER_SIZE / 2;
+      const dx = monster.position.x - this.player.position.x;
+      const dy = monster.position.y - this.player.position.y;
+      const distSq = dx * dx + dy * dy;
+      const minDist = monsterRadius + playerRadius;
+      
+      if (distSq < minDist * minDist) {
+        // Collision detected, move back to previous position
+        monster.position.x = prevPosition.x;
+        monster.position.y = prevPosition.y;
+        return;
+      }
+    }
+    
+    // Check collision with other monsters
+    this.monsters.forEach(otherMonster => {
+      if (monster === otherMonster || otherMonster.isDead) return;
+      
+      const otherRadius = otherMonster.width / 2 || 16;
+      const dx = monster.position.x - otherMonster.position.x;
+      const dy = monster.position.y - otherMonster.position.y;
+      const distSq = dx * dx + dy * dy;
+      const minDist = monsterRadius + otherRadius;
+      
+      if (distSq < minDist * minDist) {
+        // Collision detected, move back to previous position
+        monster.position.x = prevPosition.x;
+        monster.position.y = prevPosition.y;
+        return;
+      }
+    });
   }
   
   /**
@@ -1346,6 +1392,64 @@ class Game {
       console.log("Game resources cleaned up successfully");
     } catch (error) {
       console.error("Error during game shutdown:", error);
+    }
+  }
+  
+  /**
+   * Check for collisions between an entity and terrain features
+   * @param {Object} entity - The entity to check (player or monster)
+   * @param {Object} prevPosition - The entity's previous position
+   */
+  checkTerrainCollisions(entity, prevPosition) {
+    // Skip if renderer doesn't exist or no terrain features
+    if (!this.renderer || !this.renderer.terrainFeatures) return;
+    
+    // Entity collision radius (half their size)
+    const entityRadius = entity.width / 2 || CONFIG.PLAYER_SIZE / 2;
+    
+    // Check each terrain feature
+    let hasCollision = false;
+    
+    // Only check terrain features that are close to the entity for efficiency
+    for (const feature of this.renderer.terrainFeatures) {
+      // Calculate distance between entity and feature
+      const dx = entity.position.x - feature.position.x;
+      const dy = entity.position.y - feature.position.y;
+      const distanceSquared = dx * dx + dy * dy;
+      
+      // Different collision handling based on feature type
+      if (feature.type === 'tree') {
+        // Use a much larger collision radius for trees
+        const treeCollisionRadius = feature.radius * 1.5;
+        const collisionThresholdSquared = Math.pow(entityRadius + treeCollisionRadius, 2);
+        
+        // Check for tree collision with squared distance (more efficient)
+        if (distanceSquared < collisionThresholdSquared) {
+          hasCollision = true;
+          break;
+        }
+      } else {
+        // For non-tree objects, use standard collision detection
+        const maxDistance = entityRadius + feature.radius;
+        
+        // Skip if obviously too far
+        if (distanceSquared > maxDistance * maxDistance * 1.5) {
+          continue;
+        }
+        
+        // More precise check
+        const distance = Math.sqrt(distanceSquared);
+        if (distance < (entityRadius + feature.radius - 2)) { // Small forgiveness for rocks
+          hasCollision = true;
+          break;
+        }
+      }
+    }
+    
+    // If collision detected, revert to previous position
+    if (hasCollision) {
+      entity.position.x = prevPosition.x;
+      entity.position.y = prevPosition.y;
     }
   }
 } 

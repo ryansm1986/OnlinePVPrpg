@@ -58,7 +58,7 @@ class Monster {
   interpolatePosition(deltaTime) {
     // Calculate the interpolation factor based on time since last update
     // Lower values make movement smoother but slower to reach target
-    const INTERPOLATION_SPEED = 0.008; // Adjust this value to control smoothness
+    const INTERPOLATION_SPEED = 0.01; // Adjust this value to control smoothness
     
     // Calculate interpolation amount (t) based on deltaTime
     // This ensures consistent movement speed regardless of frame rate
