@@ -29,8 +29,18 @@ class EntityRenderer {
     if (!this.renderer.app || !this.renderer.game) return;
     
     try {
+      // CRITICAL DEBUG: Log when renderEntities is called
+      console.log("[RENDER DEBUG] renderEntities called");
+      
       // Clear entity layers to prevent duplicates
       this.clearEntityLayers();
+      
+      // CRITICAL DEBUG: Check if local player exists
+      if (this.renderer.game.player) {
+        console.log("[RENDER DEBUG] Local player exists, calling renderPlayerSprite");
+      } else {
+        console.log("[RENDER DEBUG] Local player does not exist");
+      }
       
       // Render the local player
       if (this.renderer.game.player) {
@@ -78,16 +88,22 @@ class EntityRenderer {
    * @param {boolean} isLocalPlayer - Whether this is the local player
    */
   renderPlayerSprite(player, isLocalPlayer) {
+    // CRITICAL DEBUG: Always log when renderPlayerSprite is called
+    console.log(`[RENDER DEBUG] renderPlayerSprite called for ${isLocalPlayer ? 'local player' : 'remote player'}`);
+    
     // Comprehensive null checks to prevent errors
     if (!player) {
-      console.warn("Cannot render player: player is undefined");
+      console.warn("[RENDER DEBUG] Cannot render player: player is undefined");
       return;
     }
     
     if (!player.position || typeof player.position.x !== 'number' || typeof player.position.y !== 'number') {
-      console.warn("Cannot render player: invalid position", player.id, player.position);
+      console.warn("[RENDER DEBUG] Cannot render player: invalid position", player.id, player.position);
       return;
     }
+    
+    // CRITICAL DEBUG: Log player data
+    console.log(`[RENDER DEBUG] Player data: id=${player.id}, class=${player.characterClass}, facing=${player.facingDirection}`);
     
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';

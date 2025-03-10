@@ -49,9 +49,8 @@ class Renderer {
   
   /**
    * Initialize the renderer
-   * @param {Function} callback - Optional callback when initialization is complete
    */
-  init(callback) {
+  init() {
     try {
       // Create PixiJS application
       this.app = new PIXI.Application({
@@ -64,42 +63,28 @@ class Renderer {
       // Add canvas to document
       document.getElementById('game-container').appendChild(this.app.view);
       
-      // Create containers first so we have layers for textures
+      // Initialize subsystems
       this.createContainers();
+      this.textureManager.loadTextures();
+      this.terrainRenderer.init();
+      this.uiRenderer.init();
+      this.minimapRenderer.init();
       
-      // Load textures asynchronously
-      this.textureManager.loadTextures(() => {
-        console.log("Textures loaded, initializing subsystems...");
-        
-        // Initialize terrain after textures are loaded
-        this.terrainRenderer.init();
-        this.uiRenderer.init();
-        this.minimapRenderer.init();
-        
-        // Set up animation cleanup
-        this.animationManager.setupAnimationCleanup();
-        
-        // Start render loop
-        this.app.ticker.add(this.render);
-        
-        // Handle window resizing
-        window.addEventListener('resize', this.resize);
-        this.resize();
-        
-        console.log("Renderer initialized successfully");
-        
-        // Execute callback if provided
-        if (typeof callback === 'function') {
-          callback();
-        }
-      });
+      // Set up animation cleanup
+      this.animationManager.setupAnimationCleanup();
+      
+      // Start render loop
+      this.app.ticker.add(this.render);
+      
+      // Handle window resizing
+      window.addEventListener('resize', this.resize);
+      this.resize();
+      
+      console.log("Renderer initialized successfully");
       
       return true;
     } catch (error) {
       console.error("Failed to initialize renderer:", error);
-      if (typeof callback === 'function') {
-        callback(error);
-      }
       return false;
     }
   }
@@ -140,7 +125,27 @@ class Renderer {
    * @param {number} delta - Time since last frame
    */
   render(delta) {
-    if (!this.game.isRunning) return;
+    if (!this.game.isRunning) {
+      console.log("[RENDER DEBUG] Game is not running, skipping render");
+      return;
+    }
+    
+    // Add debug counter to track render calls
+    if (!this._renderCount) {
+      this._renderCount = 0;
+      this._lastLogTime = Date.now();
+    }
+    
+    // Increment counter
+    this._renderCount++;
+    
+    // Log every 60 frames (approximately 1 second at 60fps)
+    if (this._renderCount % 60 === 0) {
+      const now = Date.now();
+      const elapsed = now - this._lastLogTime;
+      console.log(`[RENDER DEBUG] Render loop running (${this._renderCount} frames, ~${Math.round(1000 * 60 / elapsed)} fps)`);
+      this._lastLogTime = now;
+    }
     
     try {
       // Update camera position
@@ -148,14 +153,22 @@ class Renderer {
       
       // Render world elements
       this.terrainRenderer.updateVisibleTerrain();
+      
+      // CRITICAL DEBUG: Log before calling renderEntities
+      console.log("[RENDER DEBUG] About to call entityRenderer.renderEntities()");
+      
       this.entityRenderer.renderEntities();
+      
+      // CRITICAL DEBUG: Log after calling renderEntities
+      console.log("[RENDER DEBUG] Finished entityRenderer.renderEntities()");
+      
       this.entityRenderer.renderProjectiles();
       
       // Render UI elements
       this.uiRenderer.renderUI();
       this.minimapRenderer.updateMinimap();
     } catch (error) {
-      console.error("Error in render loop:", error);
+      console.error("[RENDER DEBUG] Error in render loop:", error);
       this.drawEmergencyWorld();
     }
   }
