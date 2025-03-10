@@ -56,11 +56,29 @@ class Monster {
    * @param {number} deltaTime - Time since last update in ms
    */
   interpolatePosition(deltaTime) {
-    // Interpolate position
-    const t = Math.min(1, deltaTime * 0.01); // Adjust speed as needed
+    // Calculate the interpolation factor based on time since last update
+    // Lower values make movement smoother but slower to reach target
+    const INTERPOLATION_SPEED = 0.008; // Adjust this value to control smoothness
     
-    this.position.x += (this.targetPosition.x - this.position.x) * t;
-    this.position.y += (this.targetPosition.y - this.position.y) * t;
+    // Calculate interpolation amount (t) based on deltaTime
+    // This ensures consistent movement speed regardless of frame rate
+    const t = Math.min(1, deltaTime * INTERPOLATION_SPEED);
+    
+    // Calculate distance to target
+    const dx = this.targetPosition.x - this.position.x;
+    const dy = this.targetPosition.y - this.position.y;
+    const distanceSquared = dx * dx + dy * dy;
+    
+    // If we're very close to the target, just snap to it
+    if (distanceSquared < 1) {
+      this.position.x = this.targetPosition.x;
+      this.position.y = this.targetPosition.y;
+      return;
+    }
+    
+    // Apply the interpolation
+    this.position.x += dx * t;
+    this.position.y += dy * t;
   }
   
   /**

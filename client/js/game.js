@@ -528,72 +528,97 @@ class Game {
     });
     
     // Update monsters
-    this.monsters.forEach(monster => {
-      if (monster.update) {
-        monster.update(this.deltaTime);
-      }
-    });
-    
-    // Clean up inactive projectiles to prevent memory buildup
-    this.cleanupProjectiles();
-  }
-  
-  /**
-   * Check for collisions between a player and terrain features
-   * @param {Object} player - The player to check
-   * @param {Object} prevPosition - The player's previous position
-   */
-  checkTerrainCollisions(player, prevPosition) {
-    // Skip if renderer doesn't exist or no terrain features
-    if (!this.renderer || !this.renderer.terrainFeatures) return;
-    
-    // Player collision radius (half their size)
-    const playerRadius = CONFIG.PLAYER_SIZE / 2;
-    
-    // Check each terrain feature
-    let hasCollision = false;
-    
-    // Only check terrain features that are close to the player for efficiency
-    for (const feature of this.renderer.terrainFeatures) {
-      // Calculate distance between player and feature
-      const dx = player.position.x - feature.position.x;
-      const dy = player.position.y - feature.position.y;
-      const distanceSquared = dx * dx + dy * dy;
+    for (const id in data.monsters) {
+      const monsterData = data.monsters[id];
       
-      // Different collision handling based on feature type
-      if (feature.type === 'tree') {
-        // Use a much larger collision radius for trees
-        const treeCollisionRadius = feature.radius * 1.5;
-        const collisionThresholdSquared = Math.pow(playerRadius + treeCollisionRadius, 2);
+      if (this.monsters.has(id)) {
+        // Update existing monster
+        const monster = this.monsters.get(id);
         
-        // Check for tree collision with squared distance (more efficient)
-        if (distanceSquared < collisionThresholdSquared) {
-          hasCollision = true;
-          break;
-        }
+        // Store current position before updating
+        const prevPosition = { ...monster.position };
+        
+        // Update monster data
+        Object.assign(monster, monsterData);
+        
+        // Set target position to the new position for interpolation
+        monster.targetPosition = { ...monster.position };
+        
+        // Set current position back to previous position for smooth interpolation
+        monster.position = prevPosition;
       } else {
-        // For non-tree objects, use standard collision detection
-        const maxDistance = playerRadius + feature.radius;
-        
-        // Skip if obviously too far
-        if (distanceSquared > maxDistance * maxDistance * 1.5) {
-          continue;
-        }
-        
-        // More precise check
-        const distance = Math.sqrt(distanceSquared);
-        if (distance < (playerRadius + feature.radius - 2)) { // Small forgiveness for rocks
-          hasCollision = true;
-          break;
-        }
+        // Create new monster
+        const monster = new Monster(monsterData);
+        // Initialize targetPosition for newly created monsters
+        monster.targetPosition = { ...monster.position };
+        this.monsters.set(id, monster);
       }
     }
     
-    // If collision detected, revert to previous position
-    if (hasCollision) {
-      player.position.x = prevPosition.x;
-      player.position.y = prevPosition.y;
+    // Process items
+    for (const id in data.items) {
+      const itemData = data.items[id];
+      
+      if (!this.items.has(id)) {
+        // Create new item
+        const item = new Item(itemData);
+        this.items.set(id, item);
+      }
     }
+    
+    // Add projectiles to players if they exist
+    if (data.projectiles) {
+      // Process player projectiles
+      data.projectiles.forEach(projectileData => {
+        // Find the owner player
+        if (this.player && projectileData.ownerId === this.player.id) {
+          if (!this.player.projectiles) {
+            this.player.projectiles = [];
+          }
+          
+          // Check if projectile already exists locally
+          const existingIdx = this.player.projectiles.findIndex(p => p.id === projectileData.id);
+          
+          if (existingIdx === -1) {
+            // Add new projectile
+            this.player.projectiles.push(projectileData);
+          } else {
+            // Update existing projectile
+            this.player.projectiles[existingIdx] = {
+              ...this.player.projectiles[existingIdx],
+              ...projectileData
+            };
+          }
+        } 
+        else if (this.players.has(projectileData.ownerId)) {
+          const player = this.players.get(projectileData.ownerId);
+          
+          if (!player.projectiles) {
+            player.projectiles = [];
+          }
+          
+          // Check if projectile already exists locally
+          const existingIdx = player.projectiles.findIndex(p => p.id === projectileData.id);
+          
+          if (existingIdx === -1) {
+            // Add new projectile
+            player.projectiles.push(projectileData);
+          } else {
+            // Update existing projectile
+            player.projectiles[existingIdx] = {
+              ...player.projectiles[existingIdx],
+              ...projectileData
+            };
+          }
+        }
+      });
+    }
+    
+    // Clean up expired projectiles
+    this.cleanupProjectiles();
+    
+    // Remove players, monsters, and items that no longer exist
+    this.cleanupEntities(data);
   }
   
   /**
@@ -653,11 +678,23 @@ class Game {
         if (this.players.has(id)) {
           // Update existing player
           const player = this.players.get(id);
+          
+          // Store current position before updating
+          const prevPosition = { ...player.position };
+          
+          // Update player data
           Object.assign(player, playerData);
+          
+          // Set target position to the new position for interpolation
           player.targetPosition = { ...player.position };
+          
+          // Set current position back to previous position for smooth interpolation
+          player.position = prevPosition;
         } else {
           // Create new player
           const player = new Player(playerData);
+          // Initialize targetPosition for newly created players
+          player.targetPosition = { ...player.position };
           this.players.set(id, player);
         }
       }
@@ -670,11 +707,23 @@ class Game {
       if (this.monsters.has(id)) {
         // Update existing monster
         const monster = this.monsters.get(id);
+        
+        // Store current position before updating
+        const prevPosition = { ...monster.position };
+        
+        // Update monster data
         Object.assign(monster, monsterData);
+        
+        // Set target position to the new position for interpolation
         monster.targetPosition = { ...monster.position };
+        
+        // Set current position back to previous position for smooth interpolation
+        monster.position = prevPosition;
       } else {
         // Create new monster
         const monster = new Monster(monsterData);
+        // Initialize targetPosition for newly created monsters
+        monster.targetPosition = { ...monster.position };
         this.monsters.set(id, monster);
       }
     }
