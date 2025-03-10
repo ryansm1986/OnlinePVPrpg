@@ -32,11 +32,21 @@ class TextureManager {
    * @returns {Object} Textures for the specified class
    */
   getPlayerTextures(className) {
-    if (!this.playerTextures[className]) {
-      console.warn(`No textures found for class ${className}, creating fallback`);
-      this.loadFallbackClassTexture(className);
+    // CRITICAL DEBUG: Log when getPlayerTextures is called
+    console.log(`[TEXTURE DEBUG] getPlayerTextures called for class: ${className}`);
+    
+    // Normalize class name
+    className = className.toLowerCase();
+    
+    // Check if we have textures for this class
+    if (this.playerTextures[className]) {
+      console.log(`[TEXTURE DEBUG] Found textures for ${className}`);
+      return this.playerTextures[className];
     }
-    return this.playerTextures[className];
+    
+    // If not, return fallback textures
+    console.warn(`[TEXTURE DEBUG] No textures found for ${className}, using fallback`);
+    return this.playerTextures.fallback;
   }
   
   /**
