@@ -186,23 +186,25 @@ class EntityRenderer {
    * @returns {string} - Direction: 'up', 'down', 'left', or 'right'
    */
   getPlayerDirection(player) {
-    // Use player's facing direction if available
+    // Always prioritize the player's facing direction if available
     if (player.facingDirection) {
       return player.facingDirection;
     }
     
+    // Fallback options if facingDirection is not set
+    
     // If player has movement data, determine direction from velocity
-    if (player.velocity) {
+    if (player.velocity && (player.velocity.x !== 0 || player.velocity.y !== 0)) {
       if (Math.abs(player.velocity.x) > Math.abs(player.velocity.y)) {
         // Moving more horizontally than vertically
         return player.velocity.x > 0 ? 'right' : 'left';
-      } else if (player.velocity.y !== 0) {
+      } else {
         // Moving more vertically than horizontally
         return player.velocity.y > 0 ? 'down' : 'up';
       }
     }
     
-    // If no movement, use animation state or default to 'down'
+    // If no movement and no facing direction, use animation state or default to 'down'
     if (player.animationState && player.animationState !== 'idle') {
       return player.animationState;
     }

@@ -21,7 +21,16 @@ class Input {
     
     // Last input time for throttling
     this.lastMovementTime = 0;
-    this.movementThrottle = 100; // ms
+    this.movementThrottle = 50; // ms
+    
+    // Directional key tracking
+    this.directionKeys = {
+      up: { key: ['w', 'arrowup'], pressed: false, lastPressed: 0 },
+      down: { key: ['s', 'arrowdown'], pressed: false, lastPressed: 0 },
+      left: { key: ['a', 'arrowleft'], pressed: false, lastPressed: 0 },
+      right: { key: ['d', 'arrowright'], pressed: false, lastPressed: 0 }
+    };
+    this.lastDirection = 'down'; // Default facing direction
     
     // Bind methods
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -30,6 +39,8 @@ class Input {
     this.handleMouseDown = this.handleMouseDown.bind(this);
     this.handleMouseUp = this.handleMouseUp.bind(this);
     this.handleContextMenu = this.handleContextMenu.bind(this);
+    this.updateMovementDirection = this.updateMovementDirection.bind(this);
+    this.processInput = this.processInput.bind(this);
   }
   
   /**
@@ -58,11 +69,29 @@ class Input {
     // Safety check to ensure event.key exists
     if (!event || event.key === undefined) return;
     
+    const key = event.key.toLowerCase();
+    
     // Store key state
-    this.keys[event.key.toLowerCase()] = true;
+    this.keys[key] = true;
+    
+    // Track direction keys with timestamp
+    const now = Date.now();
+    // Check for directional keys
+    for (const direction in this.directionKeys) {
+      if (this.directionKeys[direction].key.includes(key)) {
+        this.directionKeys[direction].pressed = true;
+        this.directionKeys[direction].lastPressed = now;
+        this.lastDirection = direction;
+        
+        // Also update the player's facing direction immediately
+        if (this.game && this.game.player) {
+          this.game.player.facingDirection = direction;
+        }
+      }
+    }
     
     // Handle special keys
-    switch (event.key.toLowerCase()) {
+    switch (key) {
       case 'i':
         // Toggle inventory
         if (!this.game.isPaused && this.game.gameStarted) {
@@ -83,7 +112,7 @@ class Input {
       case '4':
         // Use skill
         if (!this.game.isPaused && this.game.gameStarted && this.game.player) {
-          const skillId = parseInt(event.key);
+          const skillId = parseInt(key);
           this.game.network.sendSkillInput(skillId, this.mouseWorldPosition);
         }
         break;
@@ -101,29 +130,42 @@ class Input {
     // Safety check to ensure event.key exists
     if (!event || event.key === undefined) return;
     
-    // Check if this was a movement key
     const key = event.key.toLowerCase();
-    const wasMovementKey = (key === 'w' || key === 's' || key === 'a' || key === 'd' || 
-                           key === 'arrowup' || key === 'arrowdown' || key === 'arrowleft' || key === 'arrowright');
-    
-    // Get old movement direction for comparison
-    const oldDirX = this.movementDirection.x;
-    const oldDirY = this.movementDirection.y;
     
     // Update key state
     this.keys[key] = false;
     
+    // Update direction key state
+    for (const direction in this.directionKeys) {
+      if (this.directionKeys[direction].key.includes(key)) {
+        this.directionKeys[direction].pressed = false;
+      }
+    }
+    
+    // Find the most recently pressed direction that's still active
+    let latestDirection = null;
+    let latestTime = 0;
+    
+    for (const direction in this.directionKeys) {
+      if (this.directionKeys[direction].pressed && 
+          this.directionKeys[direction].lastPressed > latestTime) {
+        latestTime = this.directionKeys[direction].lastPressed;
+        latestDirection = direction;
+      }
+    }
+    
+    // Update last direction if we found an active key
+    if (latestDirection) {
+      this.lastDirection = latestDirection;
+      
+      // Update player's facing direction
+      if (this.game && this.game.player) {
+        this.game.player.facingDirection = latestDirection;
+      }
+    }
+    
     // Update movement direction
     this.updateMovementDirection();
-    
-    // If movement changed to zero, immediately send stop command
-    if (wasMovementKey && 
-        (oldDirX !== 0 || oldDirY !== 0) && 
-        (this.movementDirection.x === 0 && this.movementDirection.y === 0)) {
-      // Force immediate stop command
-      this.lastMovementTime = 0; // Reset throttle
-      this.game.network.sendMovementInput(0, 0);
-    }
   }
   
   /**
@@ -215,23 +257,50 @@ class Input {
     let dirX = 0;
     let dirY = 0;
     
-    // WASD movement
-    if (this.keys['w'] || this.keys['arrowup']) {
+    // Check each direction
+    if (this.directionKeys.up.pressed) {
       dirY = -1;
     }
-    if (this.keys['s'] || this.keys['arrowdown']) {
+    if (this.directionKeys.down.pressed) {
       dirY = 1;
     }
-    if (this.keys['a'] || this.keys['arrowleft']) {
+    if (this.directionKeys.left.pressed) {
       dirX = -1;
     }
-    if (this.keys['d'] || this.keys['arrowright']) {
+    if (this.directionKeys.right.pressed) {
       dirX = 1;
     }
     
     // Update movement direction
     this.movementDirection.x = dirX;
     this.movementDirection.y = dirY;
+    
+    // If we're moving, ensure player's facing direction matches movement
+    if (this.game && this.game.player) {
+      // Always maintain the correct facing direction, even when stopped
+      this.game.player.facingDirection = this.lastDirection;
+      
+      // If we're actually moving, update the facing direction based on movement
+      if (dirX !== 0 || dirY !== 0) {
+        // Determine direction based on dominant axis
+        if (Math.abs(dirX) > Math.abs(dirY)) {
+          // Horizontal movement is dominant
+          this.lastDirection = dirX > 0 ? 'right' : 'left';
+        } else {
+          // Vertical movement is dominant (or equal)
+          this.lastDirection = dirY > 0 ? 'down' : 'up';
+        }
+        
+        // Update player's facing direction
+        this.game.player.facingDirection = this.lastDirection;
+      }
+    }
+    
+    // If movement changed to zero, immediately send stop command
+    if (dirX === 0 && dirY === 0 && 
+        (this.game && this.game.network && this.game.player)) {
+      this.game.network.sendMovementInput(0, 0);
+    }
   }
   
   /**
@@ -248,8 +317,13 @@ class Input {
     if (now - this.lastMovementTime >= this.movementThrottle) {
       this.lastMovementTime = now;
       
-      // Send movement input to server (always send, even if zero - ensures consistent stops)
+      // Send movement input to server
       this.game.network.sendMovementInput(this.movementDirection.x, this.movementDirection.y);
+      
+      // Also update the facing direction based on our tracking system
+      if (this.game.player) {
+        this.game.player.facingDirection = this.lastDirection;
+      }
     }
     
     // Auto-attack if mouse is held down
