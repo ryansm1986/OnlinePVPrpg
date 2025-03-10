@@ -95,6 +95,9 @@ class Player {
    * @param {number} deltaTime - Time since last update in ms
    */
   updateAnimation(deltaTime) {
+    // Track previous direction to detect changes
+    const previousDirection = this.facingDirection;
+    
     // Update animation time
     this.animationTime += deltaTime;
     
@@ -105,6 +108,14 @@ class Player {
       this.animationState = 'walk';
     } else {
       this.animationState = 'idle';
+    }
+    
+    // CRITICAL FIX: Check if direction changed and reset animation
+    if (previousDirection !== this.facingDirection && this.facingDirection) {
+      // Direction changed, reset animation to ensure proper sync
+      this.animationTime = 0;
+      this.animationFrame = 0;
+      console.log(`[ANIMATION] Direction changed from ${previousDirection} to ${this.facingDirection}, resetting animation`);
     }
     
     // Update animation frame

@@ -158,6 +158,14 @@ class EntityRenderer {
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);
       
+      // CRITICAL FIX: Store the current sprite direction to detect changes
+      if (!this._playerDirectionCache) {
+        this._playerDirectionCache = new Map();
+      }
+      
+      // Get previously rendered direction
+      const prevDirection = this._playerDirectionCache.get(playerId);
+      
       // Calculate animation frame based on player's state and time
       const frameIndex = this.getAnimationFrameIndex(player, frames.length);
       
@@ -182,8 +190,21 @@ class EntityRenderer {
           sprite.width = CONFIG.PLAYER_SIZE;
           sprite.height = CONFIG.PLAYER_SIZE;
         }
+        
+        // Store the initial direction
+        this._playerDirectionCache.set(playerId, direction);
       } else {
-        // Update existing sprite texture
+        // CRITICAL FIX: Force texture update if direction has changed
+        const directionChanged = prevDirection !== direction;
+        if (directionChanged) {
+          if (isLocalPlayer) {
+            console.log(`[ANIMATION FIX] Direction changed from ${prevDirection} to ${direction}, forcing texture update`);
+          }
+          // Update the stored direction
+          this._playerDirectionCache.set(playerId, direction);
+        }
+        
+        // Always update texture to ensure animation plays
         sprite.texture = currentTexture;
       }
       
@@ -224,38 +245,59 @@ class EntityRenderer {
                   `animationState=${player.animationState}`);
     }
   
-    // CRITICAL FIX: Directly use the facingDirection property if it's valid
-    // This is the most important fix - we need to ensure facingDirection is used properly
-    if (player.facingDirection && 
-        ['up', 'down', 'left', 'right'].includes(player.facingDirection)) {
-      return player.facingDirection;
-    }
-    
-    // If facingDirection is not valid but present, log it for debugging
-    if (player.facingDirection && player.isLocalPlayer) {
-      console.warn(`Invalid facingDirection: "${player.facingDirection}"`);
+    // CRITICAL FIX: Directly use the facingDirection property if it exists
+    if (player.facingDirection) {
+      // Force to a valid direction
+      const direction = player.facingDirection.toLowerCase();
+      
+      // Ensure direction is one of the valid values
+      if (['up', 'down', 'left', 'right'].includes(direction)) {
+        if (player.isLocalPlayer) {
+          console.log(`[ANIMATION] Using player's facingDirection: "${direction}"`);
+        }
+        return direction;
+      } else {
+        // Invalid facingDirection, but we'll log it
+        if (player.isLocalPlayer) {
+          console.warn(`[ANIMATION] Invalid facingDirection: "${direction}", will use fallback`);
+        }
+      }
     }
     
     // Fallback options if facingDirection is not set or invalid
     
     // If player has movement data, determine direction from velocity
     if (player.velocity && (player.velocity.x !== 0 || player.velocity.y !== 0)) {
+      let velocityDirection;
+      
       if (Math.abs(player.velocity.x) > Math.abs(player.velocity.y)) {
         // Moving more horizontally than vertically
-        return player.velocity.x > 0 ? 'right' : 'left';
+        velocityDirection = player.velocity.x > 0 ? 'right' : 'left';
       } else {
         // Moving more vertically than horizontally
-        return player.velocity.y > 0 ? 'down' : 'up';
+        velocityDirection = player.velocity.y > 0 ? 'down' : 'up';
       }
+      
+      if (player.isLocalPlayer) {
+        console.log(`[ANIMATION] Used velocity for direction: "${velocityDirection}"`);
+      }
+      return velocityDirection;
     }
     
     // If no movement and no facing direction, use animation state or default to 'down'
     if (player.animationState && player.animationState !== 'idle' &&
         ['up', 'down', 'left', 'right'].includes(player.animationState)) {
+      if (player.isLocalPlayer) {
+        console.log(`[ANIMATION] Used animationState for direction: "${player.animationState}"`);
+      }
       return player.animationState;
     }
     
-    return 'down'; // Default direction
+    // Default direction
+    if (player.isLocalPlayer) {
+      console.log(`[ANIMATION] No valid direction found, using default: "down"`);
+    }
+    return 'down';
   }
   
   /**
