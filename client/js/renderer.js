@@ -3181,4 +3181,46 @@ class Renderer {
       console.error(`Failed to regenerate textures for ${className}:`, error);
     }
   }
+
+  /**
+   * Set the local player reference
+   * @param {Player} player - The local player object
+   */
+  setPlayer(player) {
+    // No need to store the player here since it's already stored in the game object
+    // But we can initialize any player-specific rendering resources
+    
+    // Initialize player sprite cache if needed
+    if (!this._playerSpriteCache) {
+      this._playerSpriteCache = new Map();
+    }
+    
+    // Initialize player direction cache if needed
+    if (!this._playerDirectionCache) {
+      this._playerDirectionCache = new Map();
+    }
+    
+    console.log(`Renderer: Set local player (${player.characterClass})`);
+  }
+  
+  /**
+   * Add another player to the game
+   * @param {Player} player - The player object to add
+   */
+  addPlayer(player) {
+    // The actual rendering happens in the render loop
+    // We just need to make sure the caches are initialized
+    
+    // Initialize player sprite cache if needed
+    if (!this._playerSpriteCache) {
+      this._playerSpriteCache = new Map();
+    }
+    
+    // Initialize player direction cache if needed
+    if (!this._playerDirectionCache) {
+      this._playerDirectionCache = new Map();
+    }
+    
+    console.log(`Renderer: Added player ${player.id} (${player.characterClass})`);
+  }
 } 
