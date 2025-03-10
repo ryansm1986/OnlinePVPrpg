@@ -21,6 +21,14 @@ const CONFIG = {
   },
   PLAYER_SIZE: 48,
   
+  // CRITICAL FIX: Add class-specific player sprite sizes
+  // This allows us to adjust the display size for each class to ensure they look consistent
+  PLAYER_SPRITE_SIZE: {
+    warrior: 48,
+    mage: 48,
+    ranger: 64  // Increased ranger size to make it match other classes visually
+  },
+  
   // Combat settings
   ATTACK_RANGE: {
     warrior: 40,

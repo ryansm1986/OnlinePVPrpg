@@ -2012,12 +2012,26 @@ class Renderer {
           // Set the anchor to center the sprite on the player's position
           sprite.anchor.set(0.5, 0.5);
           
-          // Set the size
-          sprite.width = CONFIG.PLAYER_SIZE;
-          sprite.height = CONFIG.PLAYER_SIZE;
+          // CRITICAL FIX: Use class-specific sprite size if available
+          const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          : CONFIG.PLAYER_SIZE;
+                          
+          // Force all player sprites to the same size regardless of texture dimensions
+          sprite.width = classSize;
+          sprite.height = classSize;
         } else {
           // Update existing sprite texture
           sprite.texture = currentTexture;
+          
+          // CRITICAL FIX: Use class-specific sprite size if available
+          const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          : CONFIG.PLAYER_SIZE;
+                          
+          // Ensure size remains consistent even after texture updates
+          sprite.width = classSize;
+          sprite.height = classSize;
         }
       } else {
         // Use default/static texture
@@ -2029,12 +2043,26 @@ class Renderer {
           // Set the anchor to center the sprite on the player's position
           sprite.anchor.set(0.5, 0.5);
           
+          // CRITICAL FIX: Use class-specific sprite size if available
+          const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          : CONFIG.PLAYER_SIZE;
+                          
           // Set the size
-          sprite.width = CONFIG.PLAYER_SIZE;
-          sprite.height = CONFIG.PLAYER_SIZE;
+          sprite.width = classSize;
+          sprite.height = classSize;
         } else {
           // Update existing sprite texture
           sprite.texture = textures.default;
+          
+          // CRITICAL FIX: Use class-specific sprite size if available
+          const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                          : CONFIG.PLAYER_SIZE;
+                          
+          // Ensure size remains consistent
+          sprite.width = classSize;
+          sprite.height = classSize;
         }
       }
       
