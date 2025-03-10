@@ -194,35 +194,30 @@ class Renderer {
   }
   
   /**
-   * Clean up animations that may have been abandoned
+   * Clean up expired animations
    */
   cleanupAnimations() {
-    const now = Date.now();
-    const expired = [];
-    
-    // Find expired animations
-    for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
-      const anim = this.activeAnimations[i];
-      if (now - anim.startTime > anim.maxAge) {
-        expired.push(anim);
-        this.activeAnimations.splice(i, 1);
-      }
-    }
-    
-    // Force cleanup of expired animations
-    expired.forEach(anim => {
-      if (anim.animation.cleanup && typeof anim.animation.cleanup === 'function') {
-        try {
-          anim.animation.cleanup();
-        } catch (e) {
-          console.error("Error cleaning up animation:", e);
+    try {
+      const now = Date.now();
+      const expired = [];
+      
+      // Find expired animations
+      this.activeAnimations.forEach((animation, id) => {
+        if (now - animation.startTime > animation.maxAge) {
+          expired.push(id);
         }
-      }
-    });
-    
-    // Log debug info
-    if (expired.length > 0 && this.game.debugMode) {
-      console.log(`Cleaned up ${expired.length} expired animations`);
+      });
+      
+      // Remove expired animations
+      expired.forEach(id => {
+        const animation = this.activeAnimations.get(id);
+        if (animation && animation.cleanup) {
+          animation.cleanup();
+        }
+        this.activeAnimations.delete(id);
+      });
+    } catch (error) {
+      console.error("Error cleaning up animations:", error);
     }
   }
   
@@ -382,14 +377,14 @@ class Renderer {
    * Load all textures
    */
   loadTextures() {
-    console.log("Loading textures...");
-    
     try {
       // First load required textures
       this.loadPlayerTextures();
       this.loadMonsterTextures();
       this.loadProjectileTextures();
       this.loadExplosionTextures();
+      this.loadWarriorSlashTextures(); // Load warrior slash animation
+      this.loadRangerShootTextures(); // Load ranger shoot animation
       
       // Copy the player textures to the main textures object
       this.textures.player = { ...this.playerTextures };
@@ -426,8 +421,6 @@ class Renderer {
       this.textures.terrain.tree = this.createTreeTexture();
       this.textures.terrain.rock = this.createRockTexture();
       this.textures.terrain.grass = this.createGrassTexture(); // Add grass texture
-      
-      console.log("Texture loading complete");
     } catch (error) {
       console.error("Error loading textures:", error);
     }
@@ -505,8 +498,6 @@ class Renderer {
     // Create various projectile textures
     this.textures.projectile.fireball = this.createFireballTexture();
     this.textures.projectile.arrow = this.createArrowTexture();
-    
-    console.log("Projectile textures loaded successfully");
   }
   
   /**
@@ -522,8 +513,160 @@ class Renderer {
     this.textures.effect.explosion = this.createColoredRectTexture(0xFF5500, 64, 64);
     this.textures.effect.hit = this.createColoredRectTexture(0xFF0000, 32, 32);
     this.textures.effect.slash = this.createSlashTexture();
-    
-    console.log("Explosion textures loaded successfully");
+  }
+  
+  /**
+   * Load the warrior slash animation sprite sheet
+   * This is a 4x6 sprite sheet for the warrior slash animation
+   */
+  loadWarriorSlashTextures() {
+    try {
+      // Path to the warrior slash sprite sheet
+      const slashPath = '/assets/classes/warrior/warrior_slash.png';
+      
+      // Load the base texture for the slash animation
+      const baseTexture = PIXI.BaseTexture.from(slashPath);
+      
+      // Define the animation frames object organized by direction
+      const slashFrames = {
+        up: [],
+        left: [],
+        down: [],
+        right: []
+      };
+      
+      // Setup for 4x6 sprite sheet (4 rows, 6 columns)
+      const numRows = 4;
+      const numCols = 6;
+      
+      // Direction mapping as specified:
+      // Row 0: Up, Row 1: Left, Row 2: Down, Row 3: Right
+      const rowDirections = ['up', 'left', 'down', 'right'];
+      
+      // Wait for the texture to load before processing
+      baseTexture.once('loaded', () => {
+        const sheetWidth = baseTexture.width;
+        const sheetHeight = baseTexture.height;
+        
+        // Calculate frame dimensions
+        const frameWidth = Math.floor(sheetWidth / numCols);
+        const frameHeight = Math.floor(sheetHeight / numRows);
+        
+        // Extract frames by direction (row by row)
+        for (let row = 0; row < numRows; row++) {
+          const direction = rowDirections[row];
+          
+          for (let col = 0; col < numCols; col++) {
+            const x = col * frameWidth;
+            const y = row * frameHeight;
+            
+            const texture = new PIXI.Texture(
+              baseTexture,
+              new PIXI.Rectangle(x, y, frameWidth, frameHeight)
+            );
+            
+            slashFrames[direction].push(texture);
+          }
+        }
+        
+        // Store the frames in the effect textures
+        if (!this.textures.effect) {
+          this.textures.effect = {};
+        }
+        this.textures.effect.slashAnimation = slashFrames;
+      });
+      
+      // In case the texture fails to load, ensure we have a fallback
+      baseTexture.once('error', (err) => {
+        console.error('Failed to load warrior slash sprite sheet:', err);
+        
+        // Just continue using the existing createSlashTexture method
+        if (!this.textures.effect) {
+          this.textures.effect = {};
+        }
+        this.textures.effect.slashAnimation = null;
+      });
+      
+    } catch (error) {
+      console.error('Error loading warrior slash textures:', error);
+    }
+  }
+  
+  /**
+   * Load the ranger shoot animation sprite sheet
+   * This is a 4x13 sprite sheet for the ranger shooting animation
+   */
+  loadRangerShootTextures() {
+    try {
+      // Path to the ranger shoot sprite sheet
+      const shootPath = '/assets/classes/ranger/ranger_shoot.png';
+      
+      // Load the base texture for the shoot animation
+      const baseTexture = PIXI.BaseTexture.from(shootPath);
+      
+      // Define the animation frames object organized by direction
+      const shootFrames = {
+        up: [],
+        down: [],
+        left: [],
+        right: []
+      };
+      
+      // Setup for 4x13 sprite sheet (4 rows, 13 columns)
+      const numRows = 4;
+      const numCols = 13;
+      
+      // Direction mapping as specified:
+      // Row 0: Up, Row 1: Down, Row 2: Left, Row 3: Right
+      const rowDirections = ['up', 'down', 'left', 'right'];
+      
+      // Wait for the texture to load before processing
+      baseTexture.once('loaded', () => {
+        const sheetWidth = baseTexture.width;
+        const sheetHeight = baseTexture.height;
+        
+        // Calculate frame dimensions
+        const frameWidth = Math.floor(sheetWidth / numCols);
+        const frameHeight = Math.floor(sheetHeight / numRows);
+        
+        // Extract frames by direction (row by row)
+        for (let row = 0; row < numRows; row++) {
+          const direction = rowDirections[row];
+          
+          for (let col = 0; col < numCols; col++) {
+            const x = col * frameWidth;
+            const y = row * frameHeight;
+            
+            const texture = new PIXI.Texture(
+              baseTexture,
+              new PIXI.Rectangle(x, y, frameWidth, frameHeight)
+            );
+            
+            shootFrames[direction].push(texture);
+          }
+        }
+        
+        // Store the frames in the effect textures
+        if (!this.textures.effect) {
+          this.textures.effect = {};
+        }
+        this.textures.effect.rangerShootAnimation = shootFrames;
+      });
+      
+      // In case the texture fails to load, ensure we have a fallback
+      baseTexture.once('error', (err) => {
+        console.error('Failed to load ranger shoot sprite sheet:', err);
+        
+        // Set a null value to indicate the animation isn't available
+        if (!this.textures.effect) {
+          this.textures.effect = {};
+        }
+        this.textures.effect.rangerShootAnimation = null;
+      });
+      
+    } catch (error) {
+      console.error('Error loading ranger shoot textures:', error);
+    }
   }
   
   /**
@@ -616,165 +759,59 @@ class Renderer {
   }
   
   /**
-   * Load a class texture with animation frames if it's a spritesheet
+   * Load a class texture with animation frames
    * @param {string} className - The class name
    * @param {string} path - The path to the texture
    */
   loadClassTextureWithAnimation(className, path) {
     try {
+      // Get dimensions from preload (if available)
+      const dimensions = this._imagePreloadDimensions.get(path) || {
+        width: 64,
+        height: 64
+      };
+      
       // Load the base texture
       const baseTexture = PIXI.BaseTexture.from(path);
       
-      // Add a listener to handle texture loading errors
-      baseTexture.on('error', (error) => {
-        console.error(`Error loading texture for class ${className} from path ${path}:`, error);
-        // Create fallback textures
-        this.createFallbackTextures(className);
+      // Handle small sprites that don't have animation frames
+      if (dimensions.width < 64 || dimensions.height < 64) {
+        const texture = new PIXI.Texture(baseTexture);
+        this.playerTextures[className] = { 
+          default: texture,
+          down: [texture],
+          left: [texture],
+          right: [texture],
+          up: [texture]
+        };
+        return;
+      }
+      
+      // Process spritesheet based on dimensions
+      baseTexture.once('loaded', () => {
+        // Generate animation frames
+        this.regenerateClassTextures(className, baseTexture);
       });
       
-      // CRITICAL FIX: Check if dimensions are available, use fallbacks if not
-      let spritesheetWidth, spritesheetHeight;
+      // Create fallback in case loading fails
+      this.playerTextures[className] = { 
+        default: this.createColoredRectTexture(
+          className === 'warrior' ? 0xff0000 : 
+          className === 'mage' ? 0x0000ff : 0x00ff00,
+          CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE
+        )
+      };
       
-      // If baseTexture dimensions are valid (non-zero), use them
-      if (baseTexture.width > 0 && baseTexture.height > 0) {
-        spritesheetWidth = baseTexture.width;
-        spritesheetHeight = baseTexture.height;
-        console.log(`Using actual dimensions from loaded texture: ${spritesheetWidth}x${spritesheetHeight}`);
-        // Process the texture immediately
-        this.processClassSpritesheet(className, baseTexture, spritesheetWidth, spritesheetHeight);
-      } else {
-        // Fallback to default dimensions if baseTexture dimensions aren't available
-        spritesheetWidth = 576;  // Default width (9 columns of 64px)
-        spritesheetHeight = 256; // Default height (4 rows of 64px)
-        console.log(`baseTexture dimensions unavailable (${baseTexture.width}x${baseTexture.height}), using fallback: ${spritesheetWidth}x${spritesheetHeight}`);
-        
-        // Create temporary fallback textures
-        this.createFallbackTextures(className);
-        
-        // CRITICAL FIX: Add an event listener to update textures when they're fully loaded
-        baseTexture.once('loaded', () => {
-          console.log(`Texture for ${className} now loaded with dimensions: ${baseTexture.width}x${baseTexture.height}`);
-          this.processClassSpritesheet(className, baseTexture, baseTexture.width, baseTexture.height);
-        });
-      }
     } catch (error) {
-      console.error(`Error in loadClassTextureWithAnimation for ${className}:`, error);
-      this.createFallbackTextures(className);
-    }
-  }
-  
-  /**
-   * Create fallback textures for a class when loading fails
-   * @param {string} className - The class name
-   */
-  createFallbackTextures(className) {
-    console.warn(`Creating fallback textures for ${className}`);
-    
-    const color = className === 'warrior' ? 0xFF0000 : 
-                 className === 'mage' ? 0x0000FF : 0x00FF00;
-    
-    const fallbackTexture = this.createColoredRectTexture(color, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
-    
-    // Create a full set of animation frames with the fallback texture
-    const frames = {
-      default: fallbackTexture,
-      down: Array(9).fill().map(() => fallbackTexture.clone()),
-      left: Array(9).fill().map(() => fallbackTexture.clone()),
-      right: Array(9).fill().map(() => fallbackTexture.clone()),
-      up: Array(9).fill().map(() => fallbackTexture.clone())
-    };
-    
-    this.playerTextures[className] = frames;
-  }
-  
-  /**
-   * Process a class spritesheet to extract animation frames
-   * @param {string} className - The class name
-   * @param {PIXI.BaseTexture} baseTexture - The base texture
-   * @param {number} spritesheetWidth - The width of the spritesheet
-   * @param {number} spritesheetHeight - The height of the spritesheet
-   */
-  processClassSpritesheet(className, baseTexture, spritesheetWidth, spritesheetHeight) {
-    console.log(`Processing ${className} spritesheet: ${spritesheetWidth}x${spritesheetHeight}`);
-    
-    // Create frames object with default structure
-    const frames = {
-      down: [],
-      left: [],
-      right: [],
-      up: [],
-      default: null
-    };
-    
-    // If sprite is too small for a proper spritesheet (likely a placeholder),
-    // just use it as a single texture for all directions
-    if (spritesheetWidth < 32 || spritesheetHeight < 32) {
-      console.log(`${className} sprite is too small for animation, using as single texture`);
-      const texture = new PIXI.Texture(baseTexture);
-      
-      // Use the same texture for all directions
-      frames.default = texture;
-      frames.down = Array(9).fill().map(() => texture.clone());
-      frames.left = Array(9).fill().map(() => texture.clone());
-      frames.right = Array(9).fill().map(() => texture.clone());
-      frames.up = Array(9).fill().map(() => texture.clone());
-    } else {
-      // CRITICAL FIX: Always assume 4 rows and 9 columns, calculate frame dimensions
-      const numCols = 9;  // 9 frames per animation row
-      const numRows = 4;  // 4 directions (rows)
-      
-      // Calculate frame dimensions based on the sprite sheet size
-      const frameWidth = Math.floor(spritesheetWidth / numCols);
-      const frameHeight = Math.floor(spritesheetHeight / numRows);
-      
-      console.log(`Calculated frame dimensions: ${frameWidth}x${frameHeight} for ${className}`);
-      
-      // CRITICAL FIX: Use the correct row mapping for the sprite sheet
-      // Row 0: Up animations
-      // Row 1: Left animations
-      // Row 2: Down animations
-      // Row 3: Right animations
-      
-      // Process for each row (direction)
-      for (let row = 0; row < numRows; row++) {
-        // Map rows to directions based on the sprite sheet layout
-        const direction = row === 0 ? 'up' : 
-                         row === 1 ? 'left' : 
-                         row === 2 ? 'down' : 'right';
-                         
-        console.log(`Processing ${direction} frames from row ${row}`);
-                         
-        // Get frames for this direction
-        for (let col = 0; col < numCols; col++) {
-          const x = col * frameWidth;
-          const y = row * frameHeight;
-          
-          try {
-            const texture = new PIXI.Texture(
-              baseTexture,
-              new PIXI.Rectangle(x, y, frameWidth, frameHeight)
-            );
-            
-            frames[direction].push(texture);
-            
-            // Use the first down frame as default
-            if (direction === 'down' && col === 0) {
-              frames.default = texture;
-            }
-          } catch (e) {
-            console.error(`Error creating texture for ${className} at position [${row},${col}]:`, e);
-          }
-        }
-      }
-    }
-    
-    // If we couldn't extract any frames, create a fallback
-    if (!frames.default || frames.down.length === 0) {
-      this.createFallbackTextures(className);
-    } else {
-      // Store the animation frames
-      this.playerTextures[className] = frames;
-      console.log(`Successfully processed ${className} animation frames: up=${frames.up.length}, down=${frames.down.length}, left=${frames.left.length}, right=${frames.right.length}`);
+      console.error(`Failed to load ${className} animation:`, error);
+      // Create a fallback colored rectangle as texture
+      this.playerTextures[className] = { 
+        default: this.createColoredRectTexture(
+          className === 'warrior' ? 0xff0000 : 
+          className === 'mage' ? 0x0000ff : 0x00ff00,
+          CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE
+        )
+      };
     }
   }
   
@@ -899,40 +936,10 @@ class Renderer {
    */
   createTreeTexture() {
     try {
-      // Check if app is initialized
-      if (!this.app || !this.app.renderer) {
-        console.warn("Cannot create tree texture - renderer not initialized");
-        // Return a simple fallback texture
-        return this.createColoredRectTexture(0x008800, 96, 96);
-      }
-      
-      const graphics = new PIXI.Graphics();
-      
-      // Tree trunk - scaled up for larger trees
-      graphics.beginFill(0x8B4513); // Brown
-      graphics.drawRect(36, 60, 24, 36);
-      graphics.endFill();
-      
-      // Tree foliage - scaled up for larger trees
-      graphics.beginFill(0x228B22); // Forest Green
-      graphics.drawCircle(48, 36, 48);
-      graphics.endFill();
-      
-      // Add some detail to the foliage - scaled up for larger trees
-      graphics.beginFill(0x006400); // Dark Green
-      graphics.drawCircle(30, 24, 15);
-      graphics.drawCircle(66, 30, 18);
-      graphics.drawCircle(48, 12, 15);
-      graphics.endFill();
-      
-      const texture = this.app.renderer.generateTexture(graphics);
-      
-      // Clean up the graphics object to prevent memory leaks
-      graphics.destroy();
-      
-      return texture;
+      // Load tree texture from file
+      return PIXI.Texture.from('/assets/terrain/tree.png');
     } catch (error) {
-      console.error("Error creating tree texture:", error);
+      console.error("Error loading tree texture from file:", error);
       // Return a simple fallback texture
       return this.createColoredRectTexture(0x008800, 96, 96);
     }
@@ -983,43 +990,10 @@ class Renderer {
    */
   createGrassTexture() {
     try {
-      // Check if app is initialized
-      if (!this.app || !this.app.renderer) {
-        console.warn("Cannot create grass texture - renderer not initialized");
-        // Return a simple fallback texture
-        return this.createColoredRectTexture(0x7CFC00, 32, 32);
-      }
-      
-      const graphics = new PIXI.Graphics();
-      
-      // Base grass
-      graphics.beginFill(0x7CFC00); // Lawn Green
-      graphics.drawRect(0, 0, 32, 32);
-      graphics.endFill();
-      
-      // Add some grass blades with fewer operations to reduce memory usage
-      graphics.lineStyle(1, 0x006400); // Dark Green
-      
-      // Draw fewer grass blades (5 instead of 10)
-      for (let i = 0; i < 5; i++) {
-        const x = 5 + i * 5; // More predictable positioning instead of random
-        const height = 4 + (i % 3) * 2; // Varied but predictable heights
-        
-        graphics.moveTo(x, 32);
-        graphics.lineTo(x - 2, 32 - height);
-        
-        graphics.moveTo(x, 32);
-        graphics.lineTo(x + 2, 32 - height);
-      }
-      
-      const texture = this.app.renderer.generateTexture(graphics);
-      
-      // Clean up the graphics object to prevent memory leaks
-      graphics.destroy();
-      
-      return texture;
+      // Load grass texture from file
+      return PIXI.Texture.from('/assets/terrain/grass.png');
     } catch (error) {
-      console.error("Error creating grass texture:", error);
+      console.error("Error loading grass texture from file:", error);
       // Return a simple fallback texture
       return this.createColoredRectTexture(0x7CFC00, 32, 32);
     }
@@ -1494,6 +1468,9 @@ class Renderer {
         );
         this.grassBackground.position.set(0, 0);
         
+        // Scale the tiles slightly larger to create overlap and hide gaps
+        this.grassBackground.tileScale.set(1.1, 1.1);
+        
         // Add the grass background as the first child (bottom layer)
         this.groundLayer.addChildAt(this.grassBackground, 0);
       }
@@ -1900,8 +1877,8 @@ class Renderer {
   }
   
   /**
-   * Render a player using either a sprite or a fallback graphic
-   * @param {Object} player - The player to render
+   * Render a player sprite
+   * @param {Object} player - The player entity to render
    * @param {boolean} isLocalPlayer - Whether this is the local player
    */
   renderPlayerSprite(player, isLocalPlayer) {
@@ -1914,29 +1891,6 @@ class Renderer {
     if (!player.position || typeof player.position.x !== 'number' || typeof player.position.y !== 'number') {
       console.warn("Cannot render player: invalid position", player.id, player.position);
       return;
-    }
-
-    // CRITICAL FIX: Add position interpolation for smoother movement
-    // Initialize lastPosition and lastUpdateTime if not exists
-    if (!player._lastPosition) {
-      player._lastPosition = { x: player.position.x, y: player.position.y };
-      player._lastUpdateTime = Date.now();
-    }
-
-    // Calculate interpolated position
-    const currentTime = Date.now();
-    const timeSinceLastUpdate = currentTime - player._lastUpdateTime;
-    const interpolationDuration = CONFIG.UPDATE_RATE; // Duration matches server update rate
-    const interpolationFactor = Math.min(timeSinceLastUpdate / interpolationDuration, 1);
-
-    // Calculate interpolated position
-    const interpolatedX = player._lastPosition.x + (player.position.x - player._lastPosition.x) * interpolationFactor;
-    const interpolatedY = player._lastPosition.y + (player.position.y - player._lastPosition.y) * interpolationFactor;
-
-    // Update last position when we reach the target
-    if (interpolationFactor === 1) {
-      player._lastPosition = { x: player.position.x, y: player.position.y };
-      player._lastUpdateTime = currentTime;
     }
     
     // Ensure playerTextures exists
@@ -1963,11 +1917,6 @@ class Renderer {
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';
     
-    // ANIMATION DEBUG: Log player facing direction for local player
-    if (isLocalPlayer) {
-      console.log(`[ANIMATION DEBUG] Player facing: ${player.facingDirection}, id: ${playerId}`);
-    }
-    
     // Ensure textures for this class exist
     if (!this.playerTextures[charClass]) {
       console.warn(`No textures found for class ${charClass}, creating fallback`);
@@ -1985,6 +1934,148 @@ class Renderer {
     }
     
     try {
+      // Check if this is a warrior who is attacking - use slash animation instead of regular sprite
+      if (charClass === 'warrior' && player.isAttacking && 
+          this.textures && this.textures.effect && this.textures.effect.slashAnimation) {
+        
+        // Get the direction
+        const direction = player.facingDirection || 'down';
+        
+        // Check if we have slash animation frames for this direction
+        if (this.textures.effect.slashAnimation[direction] && 
+            this.textures.effect.slashAnimation[direction].length > 0) {
+          
+          // Get or create the animated sprite
+          let slashSprite = this._playerSpriteCache.get(playerId + '_slash');
+          
+          if (!slashSprite || !(slashSprite instanceof PIXI.AnimatedSprite)) {
+            // Create new animated sprite
+            slashSprite = new PIXI.AnimatedSprite(this.textures.effect.slashAnimation[direction]);
+            this._playerSpriteCache.set(playerId + '_slash', slashSprite);
+            
+            // Set the anchor to center
+            slashSprite.anchor.set(0.5, 0.5);
+            
+            // Configure animation
+            slashSprite.animationSpeed = 0.3;
+            slashSprite.loop = false;
+            
+            // Set scale - make it 1.5x larger (half of previous size)
+            slashSprite.scale.set(.75, .75);
+            
+            // Start the animation
+            slashSprite.play();
+            
+            // Set up completion handler to switch back to regular sprite
+            slashSprite.onComplete = () => {
+              // Remove the slash sprite
+              if (slashSprite.parent) {
+                slashSprite.parent.removeChild(slashSprite);
+              }
+              
+              // Reset the player's attacking state (if we control this)
+              if (isLocalPlayer && this.game && this.game.player) {
+                this.game.player.isAttacking = false;
+              }
+            };
+          } else {
+            // Update existing sprite with new animation if direction changed
+            const currentDirection = slashSprite._currentDirection || '';
+            
+            if (currentDirection !== direction) {
+              slashSprite.textures = this.textures.effect.slashAnimation[direction];
+              slashSprite._currentDirection = direction;
+              slashSprite.gotoAndPlay(0);
+            }
+            
+            // If animation is complete, restart it
+            if (!slashSprite.playing) {
+              slashSprite.gotoAndPlay(0);
+            }
+          }
+          
+          // Update position
+          slashSprite.position.set(player.position.x, player.position.y);
+          
+          // Add to entity layer
+          this.entityLayer.addChild(slashSprite);
+          
+          // Skip rendering the regular player sprite
+          return;
+        }
+      }
+      
+      // Check if this is a ranger who is attacking - use shoot animation instead of regular sprite
+      if (charClass === 'ranger' && player.isAttacking && 
+          this.textures && this.textures.effect && this.textures.effect.rangerShootAnimation) {
+        
+        // Get the direction
+        const direction = player.facingDirection || 'down';
+        
+        // Check if we have shoot animation frames for this direction
+        if (this.textures.effect.rangerShootAnimation[direction] && 
+            this.textures.effect.rangerShootAnimation[direction].length > 0) {
+          
+          // Get or create the animated sprite
+          let shootSprite = this._playerSpriteCache.get(playerId + '_shoot');
+          
+          if (!shootSprite || !(shootSprite instanceof PIXI.AnimatedSprite)) {
+            // Create new animated sprite
+            shootSprite = new PIXI.AnimatedSprite(this.textures.effect.rangerShootAnimation[direction]);
+            this._playerSpriteCache.set(playerId + '_shoot', shootSprite);
+            
+            // Set the anchor to center
+            shootSprite.anchor.set(0.5, 0.5);
+            
+            // Configure animation - make it slightly faster than warrior
+            shootSprite.animationSpeed = 0.4;
+            shootSprite.loop = false;
+            
+            // Set scale
+            shootSprite.scale.set(0.75, 0.75);
+            
+            // Start the animation
+            shootSprite.play();
+            
+            // Set up completion handler to switch back to regular sprite
+            shootSprite.onComplete = () => {
+              // Remove the shoot sprite
+              if (shootSprite.parent) {
+                shootSprite.parent.removeChild(shootSprite);
+              }
+              
+              // Reset the player's attacking state (if we control this)
+              if (isLocalPlayer && this.game && this.game.player) {
+                this.game.player.isAttacking = false;
+              }
+            };
+          } else {
+            // Update existing sprite with new animation if direction changed
+            const currentDirection = shootSprite._currentDirection || '';
+            
+            if (currentDirection !== direction) {
+              shootSprite.textures = this.textures.effect.rangerShootAnimation[direction];
+              shootSprite._currentDirection = direction;
+              shootSprite.gotoAndPlay(0);
+            }
+            
+            // If animation is complete, restart it
+            if (!shootSprite.playing) {
+              shootSprite.gotoAndPlay(0);
+            }
+          }
+          
+          // Update position
+          shootSprite.position.set(player.position.x, player.position.y);
+          
+          // Add to entity layer
+          this.entityLayer.addChild(shootSprite);
+          
+          // Skip rendering the regular player sprite
+          return;
+        }
+      }
+      
       // Get the textures for this class
       const textures = this.playerTextures[charClass];
       
@@ -2002,9 +2093,6 @@ class Renderer {
         // First priority: Use player's explicit facingDirection if it exists and is valid
         if (player.facingDirection && ['up', 'down', 'left', 'right'].includes(player.facingDirection)) {
           direction = player.facingDirection;
-          if (isLocalPlayer) {
-            console.log(`[ANIMATION DEBUG] Using facingDirection: ${direction}`);
-          }
         }
         // Second priority: If player has movement data, use it to determine direction
         else if (player.movement && (player.movement.x !== 0 || player.movement.y !== 0)) {
@@ -2014,9 +2102,6 @@ class Renderer {
           } else {
             // Moving more vertically than horizontally
             direction = player.movement.y > 0 ? 'down' : 'up';
-          }
-          if (isLocalPlayer) {
-            console.log(`[ANIMATION DEBUG] Using movement direction: ${direction}`);
           }
         }
         // Third priority: If player has velocity data, use it
@@ -2028,141 +2113,23 @@ class Renderer {
             // Moving more vertically than horizontally
             direction = player.velocity.y > 0 ? 'down' : 'up';
           }
-          if (isLocalPlayer) {
-            console.log(`[ANIMATION DEBUG] Using velocity direction: ${direction}`);
-          }
         }
         
         // Check if direction has changed
         const directionChanged = prevDirection !== direction;
-        if (directionChanged && isLocalPlayer) {
-          console.log(`[ANIMATION DEBUG] Direction changed from ${prevDirection || 'none'} to ${direction}`);
-        }
         
         // Store the current direction
         this._playerDirectionCache.set(playerId, direction);
         
-        // Verify that the direction is valid and textures exist for it
-        if (!textures[direction] || textures[direction].length === 0) {
-          console.warn(`No textures found for direction ${direction}, falling back to 'down'`);
-          direction = 'down'; // Fall back to down if the chosen direction is invalid
-        }
-        
         // Get frames for this direction
-        const directionFrames = textures[direction];
+        const directionFrames = textures[direction] || textures.down;
         
-        // CRITICAL FIX: Ensure we have frames
-        if (!directionFrames || directionFrames.length === 0) {
-          console.error(`Critical error: No animation frames found for ${charClass} in direction ${direction}`);
-          
-          // Use default texture as fallback
-          if (textures.default) {
-            if (!sprite) {
-              sprite = new PIXI.Sprite(textures.default);
-              this._playerSpriteCache.set(playerId, sprite);
-              sprite.anchor.set(0.5, 0.5);
-            } else {
-              sprite.texture = textures.default;
-            }
-            
-            // CRITICAL FIX: Use class-specific sprite size if available
-            const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
-                           ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
-                           : CONFIG.PLAYER_SIZE;
-                           
-            // Set the size
-            sprite.width = classSize;
-            sprite.height = classSize;
-            
-            // Update position using interpolated coordinates
-            sprite.position.set(interpolatedX, interpolatedY);
-            return sprite;
-          }
-          return sprite || null;
-        }
+        // Calculate animation frame based on time or movement
+        const animationSpeed = 200; // ms per frame
+        const frameIndex = Math.floor(Date.now() / animationSpeed) % directionFrames.length;
         
-        // CRITICAL FIX: Debug log the available textures for this direction
-        if (isLocalPlayer) {
-            console.log(`[ANIMATION DEBUG] Direction: ${direction}, Frames available: ${directionFrames ? directionFrames.length : 0}`);
-            console.log(`[ANIMATION DEBUG] Available directions:`, Object.keys(textures));
-        }
-        
-        // CRITICAL FIX: Calculate animation frame based on movement
-        // Only animate if the player is actually moving
-        const isMoving = (player.velocity && (Math.abs(player.velocity.x) > 0.1 || Math.abs(player.velocity.y) > 0.1)) ||
-                        (player.movement && (Math.abs(player.movement.x) > 0.1 || Math.abs(player.movement.y) > 0.1));
-        
-        // Initialize animation state if not exists
-        if (!player._animationState) {
-            player._animationState = {
-                currentFrame: 0,
-                lastFrameTime: Date.now(),
-                frameInterval: 150, // Slightly slower animation for better visibility
-                direction: direction
-            };
-        }
-
-        // If direction changed, reset animation frame
-        if (player._animationState.direction !== direction) {
-            if (isLocalPlayer) {
-                console.log(`[ANIMATION DEBUG] Direction changed from ${player._animationState.direction} to ${direction}, resetting animation`);
-            }
-            player._animationState.currentFrame = 0;
-            player._animationState.direction = direction;
-        }
-        
-        // CRITICAL FIX: Ensure directionFrames is valid and has length
-        if (!directionFrames || !directionFrames.length) {
-            console.warn(`No frames found for direction ${direction} in class ${charClass}`);
-            // If no frames for this direction, try to use default
-            if (textures.default) {
-                const defaultTexture = textures.default;
-                if (sprite) {
-                    sprite.texture = defaultTexture;
-                } else {
-                    sprite = new PIXI.Sprite(defaultTexture);
-                    this._playerSpriteCache.set(playerId, sprite);
-                    sprite.anchor.set(0.5, 0.5);
-                }
-                
-                // Set size and position
-                const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
-                              ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
-                              : CONFIG.PLAYER_SIZE;
-                sprite.width = classSize;
-                sprite.height = classSize;
-                sprite.position.set(interpolatedX, interpolatedY);
-                return sprite;
-            }
-        }
-
-        let frameIndex;
-        
-        if (isMoving) {
-            // Animate when moving
-            const currentTime = Date.now();
-            if (currentTime - player._animationState.lastFrameTime >= player._animationState.frameInterval) {
-                // Safely increment frame within the available frames
-                player._animationState.currentFrame = (player._animationState.currentFrame + 1) % directionFrames.length;
-                player._animationState.lastFrameTime = currentTime;
-            }
-            frameIndex = player._animationState.currentFrame;
-            
-            if (isLocalPlayer && frameIndex % 3 === 0) { // Log only every 3rd frame to reduce spam
-                console.log(`[ANIMATION DEBUG] Animation frame: ${frameIndex}/${directionFrames.length-1} for direction ${direction}`);
-            }
-        } else {
-            // Use first frame when standing still
-            frameIndex = 0;
-        }
-        
-        // Get the current texture (with safety check)
-        const currentTexture = directionFrames[frameIndex] || directionFrames[0] || textures.default;
-        
-        if (!currentTexture) {
-            console.warn(`No texture found for ${charClass} in direction ${direction} at frame ${frameIndex}`);
-            return sprite; // Return existing sprite without changes if no texture found
-        }
+        // Get the current texture
+        const currentTexture = directionFrames[frameIndex];
         
         // Create sprite if it doesn't exist, or update texture if it does
         if (!sprite) {
@@ -2227,16 +2194,16 @@ class Renderer {
         }
       }
       
-      // Update position using interpolated coordinates
-      sprite.position.set(interpolatedX, interpolatedY);
+      // Update position
+      sprite.position.set(player.position.x, player.position.y);
       
       // Add the sprite to the entity layer
       this.entityLayer.addChild(sprite);
       
-      // Add slash effect for warrior when attacking
-      if (player.isAttacking && charClass === 'warrior') {
-        this.showWarriorSlashEffect(player);
-      }
+      // Remove the separate slash effect since we're now using the slash animation as the player sprite
+      // if (player.isAttacking && charClass === 'warrior') {
+      //   this.showWarriorSlashEffect(player);
+      // }
     } 
     catch (error) {
       // Log the error
@@ -2265,8 +2232,8 @@ class Renderer {
       playerGraphics.lineStyle(2, 0xFFFFFF, 1.0);
       playerGraphics.beginFill(color, 0.8);
       playerGraphics.drawRect(
-        interpolatedX - CONFIG.PLAYER_SIZE/2, 
-        interpolatedY - CONFIG.PLAYER_SIZE/2, 
+        player.position.x - CONFIG.PLAYER_SIZE/2, 
+        player.position.y - CONFIG.PLAYER_SIZE/2, 
         CONFIG.PLAYER_SIZE, 
         CONFIG.PLAYER_SIZE
       );
@@ -2279,7 +2246,7 @@ class Renderer {
     // Get or create name text
     let nameText = this._playerTextCache.get(playerId);
     const displayText = isLocalPlayer ? 
-      `YOU (${Math.round(interpolatedX)},${Math.round(interpolatedY)})` : 
+      `YOU (${Math.round(player.position.x)},${Math.round(player.position.y)})` : 
       player.name;
       
     if (!nameText) {
@@ -2291,10 +2258,10 @@ class Renderer {
       nameText.text = displayText;
     }
     
-    // Update position using interpolated coordinates
+    // Update position
     nameText.position.set(
-      interpolatedX - nameText.width / 2,
-      interpolatedY - CONFIG.PLAYER_SIZE/2 - 20
+      player.position.x - nameText.width / 2,
+      player.position.y - CONFIG.PLAYER_SIZE/2 - 20
     );
     
     this.entityLayer.addChild(nameText);
@@ -2895,8 +2862,26 @@ class Renderer {
         return;
       }
       
-      // Create slash sprite using the slash texture
-      const slash = new PIXI.Sprite(this.textures.effect.slash);
+      // Default direction if not specified
+      const direction = player.facingDirection || 'down';
+      
+      // Check if we have the slash animation frames for this direction
+      const useAnimatedSlash = this.textures.effect && 
+                              this.textures.effect.slashAnimation && 
+                              this.textures.effect.slashAnimation[direction] &&
+                              this.textures.effect.slashAnimation[direction].length > 0;
+      
+      let slash;
+      
+      if (useAnimatedSlash) {
+        // Create animated sprite from the slash animation frames for this direction
+        slash = new PIXI.AnimatedSprite(this.textures.effect.slashAnimation[direction]);
+        slash.animationSpeed = 0.3; // Adjust speed as needed
+        slash.loop = false;
+      } else {
+        // Fallback to the static slash texture
+        slash = new PIXI.Sprite(this.textures.effect.slash);
+      }
       
       // Set origin to center for proper rotation
       slash.anchor.set(0.5, 0.5);
@@ -2906,24 +2891,38 @@ class Renderer {
       let offsetX = 0;
       let offsetY = 0;
       
-      // Determine direction of slash based on player direction
+      // Determine position of slash based on player direction
+      // Note: The animation already has the correct rotation per direction,
+      // so we don't need to rotate the sprite anymore if using the animated slash
       if (player.facingDirection) {
         switch (player.facingDirection) {
           case 'up':
             offsetY = -offsetDistance;
-            slash.rotation = -Math.PI / 2; // -90 degrees
+            // Only rotate if using static slash
+            if (!useAnimatedSlash) {
+              slash.rotation = -Math.PI / 2; // -90 degrees
+            }
             break;
           case 'down':
             offsetY = offsetDistance;
-            slash.rotation = Math.PI / 2; // 90 degrees
+            // Only rotate if using static slash
+            if (!useAnimatedSlash) {
+              slash.rotation = Math.PI / 2; // 90 degrees
+            }
             break;
           case 'left':
             offsetX = -offsetDistance;
-            slash.rotation = Math.PI; // 180 degrees
+            // Only rotate if using static slash
+            if (!useAnimatedSlash) {
+              slash.rotation = Math.PI; // 180 degrees
+            }
             break;
           case 'right':
             offsetX = offsetDistance;
-            slash.rotation = 0; // 0 degrees
+            // Only rotate if using static slash
+            if (!useAnimatedSlash) {
+              slash.rotation = 0; // 0 degrees
+            }
             break;
         }
       }
@@ -2931,9 +2930,15 @@ class Renderer {
       // Position slash at player position plus offset
       slash.position.set(player.position.x + offsetX, player.position.y + offsetY);
       
-      // Set initial scale and alpha
-      slash.scale.set(0.5, 0.5);
-      slash.alpha = 0.9;
+      // For animated sprite, adjust scale to match the game's style
+      if (useAnimatedSlash) {
+        // Adjust scale for the animated slash effect
+        slash.scale.set(1.2, 1.2); // Might need to adjust this value based on the sprite size
+      } else {
+        // Set initial scale and alpha for the static sprite only
+        slash.scale.set(0.5, 0.5);
+        slash.alpha = 0.9;
+      }
       
       // Add to effect layer
       this.effectLayer.addChild(slash);
@@ -2941,30 +2946,43 @@ class Renderer {
       // Flag to track if animation is still active
       let isActive = true;
       
-      // Animate the slash
-      const animate = () => {
-        // Check if still active
-        if (!isActive) return;
+      // For animated slash, start the animation and remove when complete
+      if (useAnimatedSlash) {
+        slash.play();
         
-        // Get current slash props
-        let currentAlpha = slash.alpha;
-        let currentScale = slash.scale.x;
-        
-        // Update alpha (fade out)
-        currentAlpha -= 0.1;
-        slash.alpha = currentAlpha;
-        
-        // Update scale (expand slightly)
-        currentScale += 0.2;
-        slash.scale.set(currentScale, currentScale);
-        
-        // Continue animation or clean up
-        if (currentAlpha > 0) {
-          requestAnimationFrame(animate);
-        } else {
+        // Listen for animation completion
+        slash.onComplete = () => {
           cleanup();
-        }
-      };
+        };
+      } else {
+        // For static slash, use the existing animation logic
+        const animate = () => {
+          // Check if still active
+          if (!isActive) return;
+          
+          // Get current slash props
+          let currentAlpha = slash.alpha;
+          let currentScale = slash.scale.x;
+          
+          // Update alpha (fade out)
+          currentAlpha -= 0.1;
+          slash.alpha = currentAlpha;
+          
+          // Update scale (expand slightly)
+          currentScale += 0.2;
+          slash.scale.set(currentScale, currentScale);
+          
+          // Continue animation or clean up
+          if (currentAlpha > 0) {
+            requestAnimationFrame(animate);
+          } else {
+            cleanup();
+          }
+        };
+        
+        // Start static animation
+        requestAnimationFrame(animate);
+      }
       
       // Cleanup function
       const cleanup = () => {
@@ -2987,9 +3005,6 @@ class Renderer {
       
       // Track the animation for cleanup
       this.trackAnimation(animation);
-      
-      // Start animation
-      requestAnimationFrame(animate);
     } catch (error) {
       console.error("Error showing warrior slash effect:", error);
     }
@@ -3130,9 +3145,6 @@ class Renderer {
       const frameWidth = Math.floor(spritesheetWidth / numCols);
       const frameHeight = Math.floor(spritesheetHeight / numRows);
       
-      console.log(`Regenerating ${className} with dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
-      console.log(`New frame dimensions: ${frameWidth}x${frameHeight}`);
-      
       // Create frames object with default structure
       const frames = {
         down: [],
@@ -3148,9 +3160,7 @@ class Renderer {
         const direction = row === 0 ? 'up' : 
                          row === 1 ? 'left' : 
                          row === 2 ? 'down' : 'right';
-                         
-        console.log(`Regenerating ${direction} frames from row ${row}`);
-                         
+        
         // Get frames for this direction
         for (let col = 0; col < numCols; col++) {
           const x = col * frameWidth;
@@ -3172,7 +3182,6 @@ class Renderer {
       
       // Store the regenerated animation frames
       this.playerTextures[className] = frames;
-      console.log(`Successfully regenerated ${className} animation frames`);
     } catch (error) {
       console.error(`Failed to regenerate textures for ${className}:`, error);
     }

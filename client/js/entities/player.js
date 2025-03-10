@@ -115,7 +115,6 @@ class Player {
       // Direction changed, reset animation to ensure proper sync
       this.animationTime = 0;
       this.animationFrame = 0;
-      console.log(`[ANIMATION] Direction changed from ${previousDirection} to ${this.facingDirection}, resetting animation`);
     }
     
     // Update animation frame
