@@ -275,31 +275,54 @@ class Input {
     this.movementDirection.x = dirX;
     this.movementDirection.y = dirY;
     
-    // If we're moving, ensure player's facing direction matches movement
-    if (this.game && this.game.player) {
-      // Always maintain the correct facing direction, even when stopped
-      this.game.player.facingDirection = this.lastDirection;
+    // Update direction based on combined key presses (handle diagonal movement)
+    if (dirX !== 0 || dirY !== 0) {
+      // Determine dominant direction (prioritize the most recent key press when in diagonals)
+      let newDirection = this.lastDirection;
       
-      // If we're actually moving, update the facing direction based on movement
-      if (dirX !== 0 || dirY !== 0) {
-        // Determine direction based on dominant axis
-        if (Math.abs(dirX) > Math.abs(dirY)) {
-          // Horizontal movement is dominant
-          this.lastDirection = dirX > 0 ? 'right' : 'left';
-        } else {
-          // Vertical movement is dominant (or equal)
-          this.lastDirection = dirY > 0 ? 'down' : 'up';
-        }
-        
-        // Update player's facing direction
-        this.game.player.facingDirection = this.lastDirection;
+      // When two keys are pressed, use the most recently pressed one
+      // But if only one is pressed, use that one
+      const upPressed = this.directionKeys.up.pressed;
+      const downPressed = this.directionKeys.down.pressed;
+      const leftPressed = this.directionKeys.left.pressed;
+      const rightPressed = this.directionKeys.right.pressed;
+      
+      if ((upPressed || downPressed) && !(leftPressed || rightPressed)) {
+        // Only vertical keys are pressed
+        newDirection = upPressed ? 'up' : 'down';
+      } 
+      else if ((leftPressed || rightPressed) && !(upPressed || downPressed)) {
+        // Only horizontal keys are pressed
+        newDirection = leftPressed ? 'left' : 'right';
       }
+      else if (upPressed && leftPressed) {
+        // Up+Left: use the most recent
+        newDirection = this.directionKeys.up.lastPressed > this.directionKeys.left.lastPressed ? 'up' : 'left';
+      }
+      else if (upPressed && rightPressed) {
+        // Up+Right: use the most recent
+        newDirection = this.directionKeys.up.lastPressed > this.directionKeys.right.lastPressed ? 'up' : 'right';
+      }
+      else if (downPressed && leftPressed) {
+        // Down+Left: use the most recent
+        newDirection = this.directionKeys.down.lastPressed > this.directionKeys.left.lastPressed ? 'down' : 'left';
+      }
+      else if (downPressed && rightPressed) {
+        // Down+Right: use the most recent
+        newDirection = this.directionKeys.down.lastPressed > this.directionKeys.right.lastPressed ? 'down' : 'right';
+      }
+      
+      this.lastDirection = newDirection;
     }
     
-    // If movement changed to zero, immediately send stop command
-    if (dirX === 0 && dirY === 0 && 
-        (this.game && this.game.network && this.game.player)) {
-      this.game.network.sendMovementInput(0, 0);
+    // If we have a game and player, always update facing direction
+    if (this.game && this.game.player) {
+      this.game.player.facingDirection = this.lastDirection;
+      
+      // Debug info
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.log(`Setting player facingDirection to ${this.lastDirection}`);
+      }
     }
   }
   
@@ -317,8 +340,12 @@ class Input {
     if (now - this.lastMovementTime >= this.movementThrottle) {
       this.lastMovementTime = now;
       
-      // Send movement input to server
-      this.game.network.sendMovementInput(this.movementDirection.x, this.movementDirection.y);
+      // Send movement input to server with facing direction
+      this.game.network.sendMovementInput(
+        this.movementDirection.x, 
+        this.movementDirection.y,
+        this.lastDirection
+      );
       
       // Also update the facing direction based on our tracking system
       if (this.game.player) {

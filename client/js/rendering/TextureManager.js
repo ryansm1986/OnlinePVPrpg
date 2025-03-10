@@ -234,10 +234,21 @@ class TextureManager {
       };
       
       // Extract frames for each direction
+      // IMPORTANT: The sprite sheet layout is:
       // Row 0: Up animations
       // Row 1: Left animations
       // Row 2: Down animations
       // Row 3: Right animations
+      
+      // Debug the frame extraction
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.group('Sprite Sheet Frame Extraction');
+        console.log(`Extracting frames for ${className} sprite sheet`);
+        console.log(`Sheet dimensions: ${sheetWidth}x${sheetHeight}`);
+        console.log(`Frame dimensions: ${frameWidth}x${frameHeight}`);
+        console.log(`Frames per row: ${framesPerRow}`);
+        console.log(`Row mapping: 0=up, 1=left, 2=down, 3=right`);
+      }
       
       for (let col = 0; col < framesPerRow; col++) {
         // Don't exceed the sheet width
@@ -274,6 +285,15 @@ class TextureManager {
             new PIXI.Rectangle(col * frameWidth, frameHeight * 3, frameWidth, frameHeight)
           )
         );
+        
+        if (CONFIG.SPRITE_SHEET_DEBUG) {
+          console.log(`Extracted frame ${col}: up(0,${col}), left(1,${col}), down(2,${col}), right(3,${col})`);
+        }
+      }
+      
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.log(`Frame counts: up=${frames.up.length}, left=${frames.left.length}, down=${frames.down.length}, right=${frames.right.length}`);
+        console.groupEnd();
       }
       
       // Make sure we have at least one frame for each direction

@@ -126,15 +126,33 @@ class EntityRenderer {
         this._debugLogged = true;
       }
       
+      // Get the player's direction
+      let direction = this.getPlayerDirection(player);
+      
+      // Debug the direction and animation selection
+      if (CONFIG.SPRITE_SHEET_DEBUG && isLocalPlayer) {
+        console.log(`Animation direction: ${direction}`);
+      }
+      
+      // Ensure we have frames for this direction, fallback to 'down' if not
+      let frames = textures[direction];
+      if (!frames || frames.length === 0) {
+        console.warn(`No frames found for direction: ${direction}, falling back to 'down'`);
+        direction = 'down';
+        frames = textures.down;
+      }
+      
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);
       
-      // Calculate animation parameters
-      let direction = this.getPlayerDirection(player);
-      let frames = textures[direction] || textures.down;
-      
       // Calculate animation frame based on player's state and time
       const frameIndex = this.getAnimationFrameIndex(player, frames.length);
+      
+      // Debug frame selection
+      if (CONFIG.SPRITE_SHEET_DEBUG && isLocalPlayer) {
+        console.log(`Selected frame ${frameIndex} of ${frames.length} for ${direction}`);
+      }
+      
       const currentTexture = frames[frameIndex];
       
       // Create sprite if it doesn't exist, or update texture if it does
@@ -186,12 +204,20 @@ class EntityRenderer {
    * @returns {string} - Direction: 'up', 'down', 'left', or 'right'
    */
   getPlayerDirection(player) {
-    // Always prioritize the player's facing direction if available
-    if (player.facingDirection) {
+    // DEBUG: Log player direction data
+    if (CONFIG.SPRITE_SHEET_DEBUG && player.isLocalPlayer) {
+      console.log(`Player direction data: facingDirection=${player.facingDirection}, velocity=`, 
+                  player.velocity, 
+                  `animationState=${player.animationState}`);
+    }
+  
+    // Always prioritize the player's facing direction if available and valid
+    if (player.facingDirection && 
+        ['up', 'down', 'left', 'right'].includes(player.facingDirection)) {
       return player.facingDirection;
     }
     
-    // Fallback options if facingDirection is not set
+    // Fallback options if facingDirection is not set or invalid
     
     // If player has movement data, determine direction from velocity
     if (player.velocity && (player.velocity.x !== 0 || player.velocity.y !== 0)) {
@@ -205,7 +231,8 @@ class EntityRenderer {
     }
     
     // If no movement and no facing direction, use animation state or default to 'down'
-    if (player.animationState && player.animationState !== 'idle') {
+    if (player.animationState && player.animationState !== 'idle' &&
+        ['up', 'down', 'left', 'right'].includes(player.animationState)) {
       return player.animationState;
     }
     

@@ -302,12 +302,14 @@ class Network {
    * Send movement input to the server
    * @param {number} directionX - X direction (-1, 0, 1)
    * @param {number} directionY - Y direction (-1, 0, 1)
+   * @param {string} facingDirection - Direction the player is facing
    */
-  sendMovementInput(directionX, directionY) {
+  sendMovementInput(directionX, directionY, facingDirection) {
     this.sendInput({
       type: 'movement',
       directionX: directionX,
-      directionY: directionY
+      directionY: directionY,
+      facingDirection: facingDirection
     });
   }
   

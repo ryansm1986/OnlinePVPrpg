@@ -123,6 +123,100 @@ document.addEventListener('DOMContentLoaded', () => {
     return img;
   };
   
+  // Helper function to visualize sprite sheet layout
+  window.visualizeSpriteSheet = function(path) {
+    const img = new Image();
+    img.onload = function() {
+      console.log(`Loaded sprite sheet for visualization: ${path}`);
+      
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      
+      // Calculate frame dimensions
+      const rows = 4; // up, left, down, right
+      const cols = 9; // maximum columns
+      const frameWidth = Math.floor(width / cols);
+      const frameHeight = Math.floor(height / rows);
+      
+      // Create a canvas to visualize the sprite sheet
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      
+      // Draw the sprite sheet
+      ctx.drawImage(img, 0, 0);
+      
+      // Draw grid lines
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+      ctx.lineWidth = 1;
+      
+      // Draw row dividers with labels
+      const rowLabels = ['UP', 'LEFT', 'DOWN', 'RIGHT'];
+      for (let row = 0; row <= rows; row++) {
+        const y = row * frameHeight;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+        
+        // Add row label
+        if (row < rows) {
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+          ctx.font = '16px Arial';
+          ctx.fillText(rowLabels[row], 5, y + 20);
+        }
+      }
+      
+      // Draw column dividers with numbers
+      for (let col = 0; col <= cols; col++) {
+        const x = col * frameWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+        
+        // Add column number
+        if (col < cols) {
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+          ctx.font = '16px Arial';
+          ctx.fillText(col.toString(), x + 5, 16);
+        }
+      }
+      
+      // Display the canvas
+      document.body.appendChild(canvas);
+      canvas.style.position = 'fixed';
+      canvas.style.top = '10px';
+      canvas.style.right = '10px';
+      canvas.style.border = '2px solid black';
+      canvas.style.zIndex = '9999';
+      canvas.style.background = 'white';
+      canvas.style.maxWidth = '50%';
+      canvas.style.maxHeight = '50%';
+      
+      // Add a close button
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = 'Close';
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.top = '5px';
+      closeBtn.style.right = '5px';
+      closeBtn.onclick = function() {
+        document.body.removeChild(canvas);
+      };
+      canvas.parentNode.appendChild(closeBtn);
+      
+      return canvas;
+    };
+    
+    img.onerror = function() {
+      console.error(`Failed to load sprite sheet for visualization: ${path}`);
+    };
+    
+    img.src = path;
+    return img;
+  };
+  
   // This would typically be in separate files, imported via <script> tags:
   // - client/js/rendering/Renderer.js
   // - client/js/rendering/TextureManager.js
