@@ -56,7 +56,8 @@ class Renderer {
       tile: {},
       effect: {},
       projectile: {},
-      terrain: {}
+      terrain: {},
+      monsterAnimations: {}
     };
     
     // Terrain features collection
@@ -1804,46 +1805,124 @@ class Renderer {
       try {
         let sprite;
         
-        // Get the appropriate texture for this monster type
-        const texture = this.textures.monster[monster.type.toLowerCase()];
+        // Check if this monster type has animations
+        const hasAnimations = this.textures.monsterAnimations && 
+                             this.textures.monsterAnimations[monster.type.toLowerCase()];
         
-        if (texture) {
-          // Reuse sprite if it exists in cache
+        // Special handling for animated monsters (like skeletons)
+        if (hasAnimations) {
           sprite = this._monsterGraphicsCache.get(monsterId);
-          if (!sprite) {
-            sprite = new PIXI.Sprite(texture);
-            this._monsterGraphicsCache.set(monsterId, sprite);
+          
+          // Get animation frames based on state and direction
+          const monsterType = monster.type.toLowerCase();
+          const direction = monster.facingDirection || 'down';
+          const isAttacking = monster.isAttacking;
+          const animationType = isAttacking ? 'attack' : 'walk';
+          const frames = this.textures.monsterAnimations[monsterType][animationType][direction];
+          
+          if (frames && frames.length > 0) {
+            // Create animated sprite if it doesn't exist
+            if (!sprite || !(sprite instanceof PIXI.AnimatedSprite)) {
+              if (sprite && sprite.parent) {
+                sprite.parent.removeChild(sprite);
+              }
+              
+              // Create new animated sprite
+              sprite = new PIXI.AnimatedSprite(frames);
+              this._monsterGraphicsCache.set(monsterId, sprite);
+              
+              // Set the anchor to center
+              sprite.anchor.set(0.5, 0.5);
+              
+              // Set animation properties
+              sprite.animationSpeed = 0.15; // Adjust for desired speed
+              sprite.loop = true;
+              
+              // Start playing animation
+              sprite.play();
+              
+              // Set size
+              const monsterSize = 48; // Size for skeletons
+              sprite.width = monsterSize;
+              sprite.height = monsterSize;
+            } 
+            // Update existing animated sprite if it's the wrong animation
+            else if (sprite instanceof PIXI.AnimatedSprite) {
+              const currentType = sprite._animationType;
+              const currentDir = sprite._direction;
+              
+              // Only update if animation changed
+              if (currentType !== animationType || currentDir !== direction) {
+                sprite.textures = frames;
+                sprite._animationType = animationType;
+                sprite._direction = direction;
+                
+                // Restart animation
+                if (!sprite.playing) {
+                  sprite.play();
+                } else {
+                  sprite.gotoAndPlay(0);
+                }
+              }
+            }
             
-            // Set the anchor to center
-            sprite.anchor.set(0.5, 0.5);
+            // Update position
+            sprite.position.set(monster.position.x, monster.position.y);
             
-            // Set size based on monster type
-            const monsterSize = monster.type === 'wolf' ? 48 : 40; // Larger size for wolf
-            sprite.width = monsterSize;
-            sprite.height = monsterSize;
+            // Add to entity layer if not already there
+            if (!sprite.parent) {
+              this.entityLayer.addChild(sprite);
+            }
           }
+        }
+        // Regular non-animated monsters
+        else {
+          // Get the appropriate texture for this monster type
+          const texture = this.textures.monster[monster.type.toLowerCase()];
           
-          // Update position
-          sprite.position.set(monster.position.x, monster.position.y);
-        } else {
-          // Fallback to simple shape if texture not found
-          sprite = this._monsterGraphicsCache.get(monsterId);
-          if (!sprite) {
-            sprite = new PIXI.Graphics();
-            this._monsterGraphicsCache.set(monsterId, sprite);
-          } else if (sprite instanceof PIXI.Graphics) {
-            sprite.clear();
+          if (texture) {
+            // Reuse sprite if it exists in cache
+            sprite = this._monsterGraphicsCache.get(monsterId);
+            if (!sprite) {
+              sprite = new PIXI.Sprite(texture);
+              this._monsterGraphicsCache.set(monsterId, sprite);
+              
+              // Set the anchor to center
+              sprite.anchor.set(0.5, 0.5);
+              
+              // Set size based on monster type
+              const monsterSize = monster.type === 'wolf' ? 48 : 40; // Larger size for wolf
+              sprite.width = monsterSize;
+              sprite.height = monsterSize;
+            }
+            
+            // Update position
+            sprite.position.set(monster.position.x, monster.position.y);
+            
+            // Add to entity layer if not already there
+            if (!sprite.parent) {
+              this.entityLayer.addChild(sprite);
+            }
+          } else {
+            // Fallback to simple shape if texture not found
+            sprite = this._monsterGraphicsCache.get(monsterId);
+            if (!sprite) {
+              sprite = new PIXI.Graphics();
+              this._monsterGraphicsCache.set(monsterId, sprite);
+            } else if (sprite instanceof PIXI.Graphics) {
+              sprite.clear();
+            }
+            
+            sprite.lineStyle(2, 0xFFFFFF, 1.0);
+            sprite.beginFill(0xFF0000, 0.8);
+            
+            const monsterSize = 40;
+            sprite.moveTo(monster.position.x, monster.position.y - monsterSize/2);
+            sprite.lineTo(monster.position.x + monsterSize/2, monster.position.y + monsterSize/2);
+            sprite.lineTo(monster.position.x - monsterSize/2, monster.position.y + monsterSize/2);
+            sprite.closePath();
+            sprite.endFill();
           }
-          
-          sprite.lineStyle(2, 0xFFFFFF, 1.0);
-          sprite.beginFill(0xFF0000, 0.8);
-          
-          const monsterSize = 40;
-          sprite.moveTo(monster.position.x, monster.position.y - monsterSize/2);
-          sprite.lineTo(monster.position.x + monsterSize/2, monster.position.y + monsterSize/2);
-          sprite.lineTo(monster.position.x - monsterSize/2, monster.position.y + monsterSize/2);
-          sprite.closePath();
-          sprite.endFill();
         }
         
         // Add or reuse monster type label
@@ -3022,6 +3101,15 @@ class Renderer {
       console.error("Failed to load wolf sprite, using fallback:", error);
       this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     }
+    
+    // Load skeleton animations
+    try {
+      // Load skeleton walk animation
+      this.loadSkeletonAnimations();
+    } catch (error) {
+      console.error("Failed to load skeleton animations, using fallback:", error);
+      this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    }
 
     // Other monster textures (fallbacks)
     this.textures.monster.bear = this.createColoredRectTexture(0x8B4513, 48, 48);
@@ -3029,12 +3117,112 @@ class Renderer {
     this.textures.monster.slime = this.createColoredRectTexture(0x00FFFF, 28, 28);
     this.textures.monster.troll = this.createColoredRectTexture(0x008800, 56, 56);
     this.textures.monster.snake = this.createColoredRectTexture(0x00FF88, 24, 24);
-    this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    // Remove the simple skeleton texture since we're implementing a proper one
     this.textures.monster.ghost = this.createColoredRectTexture(0xFFFFFF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     this.textures.monster.cultist = this.createColoredRectTexture(0x880000, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     this.textures.monster.golem = this.createColoredRectTexture(0x777777, 64, 64);
     this.textures.monster.griffon = this.createColoredRectTexture(0xFFAA00, 48, 48);
     this.textures.monster.harpy = this.createColoredRectTexture(0xFF00FF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+  }
+  
+  /**
+   * Load skeleton animations from sprite sheets
+   */
+  loadSkeletonAnimations() {
+    // Initialize monster animation textures object if it doesn't exist
+    if (!this.textures.monsterAnimations) {
+      this.textures.monsterAnimations = {};
+    }
+    
+    // Initialize skeleton animations object
+    this.textures.monsterAnimations.skeleton = {
+      walk: {
+        up: [],
+        down: [],
+        left: [],
+        right: []
+      },
+      attack: {
+        up: [],
+        down: [],
+        left: [],
+        right: []
+      },
+      default: null
+    };
+    
+    // Load walk animations
+    const walkPath = '/assets/monsters/skeleton_walk.png';
+    const walkBaseTexture = PIXI.BaseTexture.from(walkPath);
+    
+    // Load attack animations
+    const attackPath = '/assets/monsters/skeleton_attack.png';
+    const attackBaseTexture = PIXI.BaseTexture.from(attackPath);
+    
+    // Process walk sprite sheet when loaded
+    walkBaseTexture.once('loaded', () => {
+      this.processSkeletonSpriteSheet(walkBaseTexture, 'walk');
+    });
+    
+    // Process attack sprite sheet when loaded
+    attackBaseTexture.once('loaded', () => {
+      this.processSkeletonSpriteSheet(attackBaseTexture, 'attack');
+    });
+    
+    // Set a simple fallback in case loading fails
+    this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+  }
+  
+  /**
+   * Process skeleton sprite sheet to extract animation frames
+   * @param {PIXI.BaseTexture} baseTexture - The base texture to process
+   * @param {string} animationType - Either 'walk' or 'attack'
+   */
+  processSkeletonSpriteSheet(baseTexture, animationType) {
+    // Get dimensions
+    const sheetWidth = baseTexture.width;
+    const sheetHeight = baseTexture.height;
+    
+    // Determine number of frames based on animation type
+    // For skeleton_walk.png: 9 frames, 4 directions
+    // For skeleton_attack.png: 6 frames, 4 directions
+    const numCols = animationType === 'walk' ? 9 : 6;
+    const numRows = 4; // 4 rows for directions
+    
+    // Calculate frame dimensions
+    const frameWidth = Math.floor(sheetWidth / numCols);
+    const frameHeight = Math.floor(sheetHeight / numRows);
+    
+    // Direction mapping (standard RPG spritesheet layout):
+    // Row 0: Down
+    // Row 1: Left
+    // Row 2: Right
+    // Row 3: Up
+    const rowDirections = ['down', 'left', 'right', 'up'];
+    
+    // Extract frames by direction
+    for (let row = 0; row < numRows; row++) {
+      const direction = rowDirections[row];
+      
+      for (let col = 0; col < numCols; col++) {
+        const x = col * frameWidth;
+        const y = row * frameHeight;
+        
+        const texture = new PIXI.Texture(
+          baseTexture,
+          new PIXI.Rectangle(x, y, frameWidth, frameHeight)
+        );
+        
+        // Add to appropriate animation collection
+        this.textures.monsterAnimations.skeleton[animationType][direction].push(texture);
+      }
+    }
+    
+    // Set default texture (first frame of down walk animation)
+    if (animationType === 'walk' && this.textures.monsterAnimations.skeleton.walk.down.length > 0) {
+      this.textures.monster.skeleton = this.textures.monsterAnimations.skeleton.walk.down[0];
+      this.textures.monsterAnimations.skeleton.default = this.textures.monsterAnimations.skeleton.walk.down[0];
+    }
   }
 
   /**

@@ -559,9 +559,6 @@ class Game {
     // Skip if monster is dead
     if (monster.isDead) return;
     
-    // Skip if monster is already attacking
-    if (monster.isAttacking) return;
-    
     // Find closest player
     let closestPlayer = null;
     let closestDistance = Infinity;
@@ -590,15 +587,38 @@ class Game {
       }
     });
     
-    // Only follow players within a certain range (detection radius)
+    // Only follow players within detection radius
     const DETECTION_RADIUS = 200;
+    const ATTACK_RADIUS = 60; // Radius within which monsters will attack
     const FOLLOW_SPEED = 0.3; // Slow movement speed
     
     if (closestPlayer && closestDistance < DETECTION_RADIUS * DETECTION_RADIUS) {
+      // Determine if we should attack based on distance
+      const dist = Math.sqrt(closestDistance);
+      
+      // Attack if close enough and not already attacking
+      if (dist < ATTACK_RADIUS && !monster.isAttacking) {
+        monster.isAttacking = true;
+        monster.attackDirection = monster.facingDirection;
+        
+        // Set attack duration - simulate server behavior
+        const ATTACK_DURATION = 1000; // 1 second attack animation
+        
+        // Reset attack state after duration
+        setTimeout(() => {
+          monster.isAttacking = false;
+        }, ATTACK_DURATION);
+        
+        // Only move if not attacking
+        return;
+      }
+      
+      // If attacking, don't move
+      if (monster.isAttacking) return;
+      
       // Calculate direction to player
       const dx = closestPlayer.position.x - monster.position.x;
       const dy = closestPlayer.position.y - monster.position.y;
-      const dist = Math.sqrt(closestDistance);
       
       // Normalize direction and apply speed
       const moveX = (dx / dist) * FOLLOW_SPEED * this.deltaTime / 16;
@@ -1341,6 +1361,12 @@ class Game {
     
     // Log world initialization
     console.log("World data initialized - Width:", this.world.width, "Height:", this.world.height);
+    
+    // Set a timeout to ensure the terrain features are generated before spawning skeletons
+    setTimeout(() => {
+      // Spawn some skeleton monsters around the map
+      this.spawnSkeletons(10); // Spawn 10 skeletons
+    }, 1000);
   }
   
   /**
@@ -1451,5 +1477,100 @@ class Game {
       entity.position.x = prevPosition.x;
       entity.position.y = prevPosition.y;
     }
+  }
+  
+  /**
+   * Spawn skeleton monsters at random positions on the map
+   * @param {number} count - Number of skeletons to spawn
+   */
+  spawnSkeletons(count = 5) {
+    // Skip if renderer doesn't have terrain features (world may not be initialized)
+    if (!this.renderer || !this.renderer.terrainFeatures) {
+      console.warn("Cannot spawn skeletons - world not fully initialized");
+      return;
+    }
+    
+    const worldWidth = CONFIG.WORLD_WIDTH;
+    const worldHeight = CONFIG.WORLD_HEIGHT;
+    
+    // Create unique IDs for the skeletons
+    const baseId = Date.now().toString();
+    
+    for (let i = 0; i < count; i++) {
+      // Create a unique ID
+      const skeletonId = `skeleton_${baseId}_${i}`;
+      
+      // Find a valid spawn position
+      let validPosition = false;
+      let x, y;
+      let attempts = 0;
+      
+      // Try up to 20 times to find a valid position
+      while (!validPosition && attempts < 20) {
+        attempts++;
+        
+        // Generate random position, keeping away from edges
+        x = 100 + Math.random() * (worldWidth - 200);
+        y = 100 + Math.random() * (worldHeight - 200);
+        
+        // Check distance from player to avoid spawning too close
+        let tooCloseToPlayer = false;
+        if (this.player) {
+          const dx = this.player.position.x - x;
+          const dy = this.player.position.y - y;
+          const distSq = dx * dx + dy * dy;
+          
+          // Don't spawn within 300 pixels of player
+          if (distSq < 300 * 300) {
+            tooCloseToPlayer = true;
+          }
+        }
+        
+        // Check collision with terrain
+        let collides = false;
+        for (const feature of this.renderer.terrainFeatures) {
+          const dx = feature.position.x - x;
+          const dy = feature.position.y - y;
+          const distSq = dx * dx + dy * dy;
+          
+          // Use a larger collision radius to avoid spawning too close to terrain
+          const collisionRadius = feature.radius * 2;
+          if (distSq < collisionRadius * collisionRadius) {
+            collides = true;
+            break;
+          }
+        }
+        
+        validPosition = !tooCloseToPlayer && !collides;
+      }
+      
+      // If we couldn't find a valid position after 20 attempts, skip this skeleton
+      if (!validPosition) {
+        console.warn(`Could not find valid position for skeleton ${i+1} after 20 attempts`);
+        continue;
+      }
+      
+      // Create the skeleton monster
+      const skeleton = {
+        id: skeletonId,
+        type: 'Skeleton',
+        position: { x, y },
+        facingDirection: ['down', 'up', 'left', 'right'][Math.floor(Math.random() * 4)],
+        health: 50,
+        maxHealth: 50,
+        isAttacking: false,
+        width: 48,
+        height: 48,
+        state: 'idle'
+      };
+      
+      // Create a Monster instance and add it to the monsters map
+      const monsterInstance = new Monster(skeleton);
+      this.monsters.set(skeletonId, monsterInstance);
+      
+      console.log(`Spawned skeleton at (${Math.round(x)}, ${Math.round(y)})`);
+    }
+    
+    console.log(`Spawned ${count} skeletons on the map`);
   }
 } 
