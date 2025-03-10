@@ -581,10 +581,10 @@ class Renderer {
       const baseTexture = PIXI.BaseTexture.from(path);
       
       // Get the dimensions of the spritesheet
-      const spritesheetWidth = baseTexture.width;
-      const spritesheetHeight = baseTexture.height;
+      const spritesheetWidth = 576;
+      const spritesheetHeight = 256;
       
-      console.log(`${className} sprite dimensions: ${spritesheetWidth}x${spritesheetHeight}. baseTexture.width: ${baseTexture.width} and baseTexture.height: ${baseTexture.height}`);
+      console.log(`${className} sprite sheet dimensions: ${spritesheetWidth}x${spritesheetHeight}. baseTexture.width: ${baseTexture.width} and baseTexture.height: ${baseTexture.height}`);
       
       // Create frames object with default structure
       const frames = {
@@ -619,14 +619,20 @@ class Renderer {
         
         console.log(`Spritesheet has ${rows} rows and ${cols} columns of frames`);
         
-        // Extract frames for each direction
-        // Typical layout: row 0 = down, row 1 = left, row 2 = right, row 3 = up
+        // CRITICAL FIX: Use the correct row mapping for the sprite sheet
+        // Row 0: Up animations
+        // Row 1: Left animations
+        // Row 2: Down animations
+        // Row 3: Right animations
         
         // Process for each row (direction)
         for (let row = 0; row < Math.min(rows, 4); row++) {
-          const direction = row === 0 ? 'down' : 
+          // Map rows to directions based on the sprite sheet layout
+          const direction = row === 0 ? 'up' : 
                            row === 1 ? 'left' : 
-                           row === 2 ? 'right' : 'up';
+                           row === 2 ? 'down' : 'right';
+                           
+          console.log(`Processing ${direction} frames from row ${row}`);
                            
           // Get frames for this direction
           for (let col = 0; col < cols; col++) {
@@ -640,8 +646,8 @@ class Renderer {
             
             frames[direction].push(texture);
             
-            // Use the first frame (down, first column) as default
-            if (row === 0 && col === 0) {
+            // Use the first down frame as default
+            if (direction === 'down' && col === 0) {
               frames.default = texture;
             }
           }
@@ -1832,9 +1838,19 @@ class Renderer {
     if (!this._playerTextCache) {
       this._playerTextCache = new Map();
     }
+    
+    // CRITICAL FIX: Initialize direction cache to track direction changes
+    if (!this._playerDirectionCache) {
+      this._playerDirectionCache = new Map();
+    }
 
     const charClass = player.characterClass || 'warrior';
     const playerId = player.id || 'local-player';
+    
+    // ANIMATION DEBUG: Log player facing direction for local player
+    if (isLocalPlayer) {
+      console.log(`[ANIMATION DEBUG] Player facing: ${player.facingDirection}, id: ${playerId}`);
+    }
     
     // Ensure textures for this class exist
     if (!this.playerTextures[charClass]) {
@@ -1859,13 +1875,23 @@ class Renderer {
       // Create or reuse sprite
       let sprite = this._playerSpriteCache.get(playerId);
       
+      // Get the previous direction used for this player
+      const prevDirection = this._playerDirectionCache.get(playerId);
+      
       // Check if this is an animated spritesheet (has direction frames)
       if (textures.down && textures.down.length > 0) {
-        // Determine direction based on player movement or facing
+        // CRITICAL FIX: Determine direction based on player's facingDirection property first
         let direction = 'down'; // Default direction
         
-        // If player has movement data, use it to determine direction
-        if (player.movement) {
+        // First priority: Use player's explicit facingDirection if it exists and is valid
+        if (player.facingDirection && ['up', 'down', 'left', 'right'].includes(player.facingDirection)) {
+          direction = player.facingDirection;
+          if (isLocalPlayer) {
+            console.log(`[ANIMATION DEBUG] Using facingDirection: ${direction}`);
+          }
+        }
+        // Second priority: If player has movement data, use it to determine direction
+        else if (player.movement && (player.movement.x !== 0 || player.movement.y !== 0)) {
           if (Math.abs(player.movement.x) > Math.abs(player.movement.y)) {
             // Moving more horizontally than vertically
             direction = player.movement.x > 0 ? 'right' : 'left';
@@ -1873,7 +1899,32 @@ class Renderer {
             // Moving more vertically than horizontally
             direction = player.movement.y > 0 ? 'down' : 'up';
           }
+          if (isLocalPlayer) {
+            console.log(`[ANIMATION DEBUG] Using movement direction: ${direction}`);
+          }
         }
+        // Third priority: If player has velocity data, use it
+        else if (player.velocity && (player.velocity.x !== 0 || player.velocity.y !== 0)) {
+          if (Math.abs(player.velocity.x) > Math.abs(player.velocity.y)) {
+            // Moving more horizontally than vertically
+            direction = player.velocity.x > 0 ? 'right' : 'left';
+          } else {
+            // Moving more vertically than horizontally
+            direction = player.velocity.y > 0 ? 'down' : 'up';
+          }
+          if (isLocalPlayer) {
+            console.log(`[ANIMATION DEBUG] Using velocity direction: ${direction}`);
+          }
+        }
+        
+        // Check if direction has changed
+        const directionChanged = prevDirection !== direction;
+        if (directionChanged && isLocalPlayer) {
+          console.log(`[ANIMATION DEBUG] Direction changed from ${prevDirection || 'none'} to ${direction}`);
+        }
+        
+        // Store the current direction
+        this._playerDirectionCache.set(playerId, direction);
         
         // Get frames for this direction
         const directionFrames = textures[direction] || textures.down;
