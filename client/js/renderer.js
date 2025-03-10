@@ -3209,10 +3209,10 @@ class Renderer {
     
     console.log(`Wolf sprite sheet dimensions: ${sheetWidth}x${sheetHeight}`);
     
-    // Based on the wolf sprite sheet structure - typically smaller than skeleton sheets
-    // For wolf_black_walk.png and wolf_black_attack.png: using 4 frames, 4 directions
+    // Based on the wolf sprite sheet structure - using 16x16 sprites in a 4x3 grid
+    // Each row represents a different direction, with 4 frames per direction
     const numCols = 4; // 4 frames per animation
-    const numRows = 4; // 4 rows for directions
+    const numRows = 3; // 3 rows for directions
     
     // Calculate frame dimensions
     const frameWidth = Math.floor(sheetWidth / numCols);
@@ -3220,17 +3220,17 @@ class Renderer {
     
     console.log(`Wolf frame dimensions: ${frameWidth}x${frameHeight}, Grid: ${numRows}x${numCols}`);
     
-    // Direction mapping (standard RPG spritesheet layout):
+    // Direction mapping for 3-row layout:
     // Row 0: Down
-    // Row 1: Left
-    // Row 2: Right
-    // Row 3: Up
-    const rowDirections = ['down', 'left', 'right', 'up'];
+    // Row 1: Left/Right (we'll use for both)
+    // Row 2: Up
+    const rowDirections = ['down', 'left', 'up'];
     
     // Extract frames by direction
     for (let row = 0; row < numRows; row++) {
-      const direction = rowDirections[row];
+      let direction = rowDirections[row];
       
+      // Process the current row
       for (let col = 0; col < numCols; col++) {
         const x = col * frameWidth;
         const y = row * frameHeight;
@@ -3242,9 +3242,29 @@ class Renderer {
         
         // Add to appropriate animation collection
         this.textures.monsterAnimations.wolf[animationType][direction].push(texture);
+        
+        // Copy left frames to right frames (since we only have one side view)
+        if (direction === 'left') {
+          // Create a flipped texture for right direction
+          const flippedTexture = new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(x, y, frameWidth, frameHeight),
+            undefined, // origin frame
+            undefined, // trim
+            PIXI.SCALE_MODES.LINEAR,
+            undefined, // anchor
+            { x: -1, y: 1, width: 1, height: 1 } // flip X
+          );
+          
+          // Add to right direction
+          this.textures.monsterAnimations.wolf[animationType]['right'].push(flippedTexture);
+        }
       }
       
       console.log(`Extracted ${numCols} frames for ${direction} ${animationType} animation`);
+      if (direction === 'left') {
+        console.log(`Created flipped copies for right ${animationType} animation`);
+      }
     }
     
     // Set default texture (first frame of down walk animation)
