@@ -580,11 +580,11 @@ class Renderer {
       // Load the base texture
       const baseTexture = PIXI.BaseTexture.from(path);
       
-      // Get the dimensions of the spritesheet
-      const spritesheetWidth = 576;
-      const spritesheetHeight = 256;
+      // CRITICAL FIX: Use actual dimensions from the loaded texture
+      const spritesheetWidth = baseTexture.width;
+      const spritesheetHeight = baseTexture.height;
       
-      console.log(`${className} sprite sheet dimensions: ${spritesheetWidth}x${spritesheetHeight}. baseTexture.width: ${baseTexture.width} and baseTexture.height: ${baseTexture.height}`);
+      console.log(`${className} sprite sheet dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
       
       // Create frames object with default structure
       const frames = {
@@ -608,16 +608,16 @@ class Renderer {
         frames.right.push(texture);
         frames.up.push(texture);
       } else {
-        // For larger spritesheets, extract animation frames
-        // Typically 16x16 pixel frames arranged in a grid
-        const frameWidth = 64;
-        const frameHeight = 64;
+        // CRITICAL FIX: Always assume 4 rows and 9 columns, calculate frame dimensions
+        const numCols = 9;  // 9 frames per animation row
+        const numRows = 4;  // 4 directions (rows)
         
-        // Calculate rows and columns in the sheet
-        const cols = Math.floor(spritesheetWidth / frameWidth);
-        const rows = Math.floor(spritesheetHeight / frameHeight);
+        // Calculate frame dimensions based on the sprite sheet size
+        const frameWidth = Math.floor(spritesheetWidth / numCols);
+        const frameHeight = Math.floor(spritesheetHeight / numRows);
         
-        console.log(`Spritesheet has ${rows} rows and ${cols} columns of frames`);
+        console.log(`Calculated frame dimensions: ${frameWidth}x${frameHeight}`);
+        console.log(`Spritesheet has ${numRows} rows and ${numCols} columns of frames`);
         
         // CRITICAL FIX: Use the correct row mapping for the sprite sheet
         // Row 0: Up animations
@@ -626,7 +626,7 @@ class Renderer {
         // Row 3: Right animations
         
         // Process for each row (direction)
-        for (let row = 0; row < Math.min(rows, 4); row++) {
+        for (let row = 0; row < numRows; row++) {
           // Map rows to directions based on the sprite sheet layout
           const direction = row === 0 ? 'up' : 
                            row === 1 ? 'left' : 
@@ -635,7 +635,7 @@ class Renderer {
           console.log(`Processing ${direction} frames from row ${row}`);
                            
           // Get frames for this direction
-          for (let col = 0; col < cols; col++) {
+          for (let col = 0; col < numCols; col++) {
             const x = col * frameWidth;
             const y = row * frameHeight;
             
