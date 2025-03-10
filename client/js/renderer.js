@@ -25,6 +25,9 @@ class Renderer {
     this.activeAnimations = [];
     this.animationCleanupInterval = null;
     
+    // Map to store preloaded image dimensions
+    this._imagePreloadDimensions = new Map();
+    
     // Containers
     this.worldContainer = null;
     this.uiContainer = null;
@@ -86,7 +89,7 @@ class Renderer {
   /**
    * Initialize the renderer
    */
-  init() {
+  async init() {
     try {
       // Create PixiJS application
       this.app = new PIXI.Application({
@@ -128,7 +131,7 @@ class Renderer {
       this.createContainers();
       
       // Load textures
-      this.loadTextures();
+      await this.loadTextures();
       
       // Generate character previews for character selection screen
       try {
@@ -376,10 +379,10 @@ class Renderer {
   /**
    * Load all textures
    */
-  loadTextures() {
+  async loadTextures() {
     try {
       // First load required textures
-      this.loadPlayerTextures();
+      await this.loadPlayerTextures();
       this.loadMonsterTextures();
       this.loadProjectileTextures();
       this.loadExplosionTextures();
@@ -429,14 +432,16 @@ class Renderer {
   /**
    * Preload an image to get its dimensions before creating textures
    * @param {string} path - Path to the image
-   * @returns {Promise<{width: number, height: number}>} Image dimensions
+   * @returns {Promise<{width: number, height: number}>} Promise resolving to the image dimensions
    */
   preloadImage(path) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        console.log(`Preloaded image ${path} with dimensions: ${img.width}x${img.height}`);
-        resolve({ width: img.width, height: img.height });
+        const dimensions = { width: img.width, height: img.height };
+        // Store dimensions in the Map for later use
+        this._imagePreloadDimensions.set(path, dimensions);
+        resolve(dimensions);
       };
       img.onerror = (err) => {
         console.error(`Failed to preload image ${path}:`, err);
@@ -449,41 +454,27 @@ class Renderer {
   /**
    * Load player textures
    */
-  loadPlayerTextures() {
+  async loadPlayerTextures() {
     this.playerTextures = {};
     
-    // Load warrior texture
-    const warriorPath = '/assets/classes/warrior/warriorsprite.png';
-    this.preloadImage(warriorPath)
-      .then(dimensions => {
-        console.log(`Warrior sprite dimensions: ${dimensions.width}x${dimensions.height}`);
-      })
-      .catch(err => {
-        console.warn('Failed to preload warrior sprite, will use fallback dimensions');
-      });
-    this.loadClassTextureWithAnimation('warrior', warriorPath);
-    
-    // Load mage texture
-    const magePath = '/assets/classes/mage/magesprite.png';
-    this.preloadImage(magePath)
-      .then(dimensions => {
-        console.log(`Mage sprite dimensions: ${dimensions.width}x${dimensions.height}`);
-      })
-      .catch(err => {
-        console.warn('Failed to preload mage sprite, will use fallback dimensions');
-      });
-    this.loadClassTextureWithAnimation('mage', magePath);
-    
-    // Load ranger texture - use the path from client assets (correct path)
-    const rangerPath = '/assets/classes/ranger/rangersprite.png';
-    this.preloadImage(rangerPath)
-      .then(dimensions => {
-        console.log(`Ranger sprite dimensions: ${dimensions.width}x${dimensions.height}`);
-      })
-      .catch(err => {
-        console.warn('Failed to preload ranger sprite, will use fallback dimensions');
-      });
-    this.loadClassTextureWithAnimation('ranger', rangerPath);
+    try {
+      // Load warrior texture
+      const warriorPath = '/assets/classes/warrior/warriorsprite.png';
+      await this.preloadImage(warriorPath);
+      this.loadClassTextureWithAnimation('warrior', warriorPath);
+      
+      // Load mage texture
+      const magePath = '/assets/classes/mage/magesprite.png';
+      await this.preloadImage(magePath);
+      this.loadClassTextureWithAnimation('mage', magePath);
+      
+      // Load ranger texture
+      const rangerPath = '/assets/classes/ranger/rangersprite.png';
+      await this.preloadImage(rangerPath);
+      this.loadClassTextureWithAnimation('ranger', rangerPath);
+    } catch (error) {
+      console.error("Error loading player textures:", error);
+    }
   }
   
   /**
