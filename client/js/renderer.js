@@ -625,6 +625,13 @@ class Renderer {
       // Load the base texture
       const baseTexture = PIXI.BaseTexture.from(path);
       
+      // Add a listener to handle texture loading errors
+      baseTexture.on('error', (error) => {
+        console.error(`Error loading texture for class ${className} from path ${path}:`, error);
+        // Create fallback textures
+        this.createFallbackTextures(className);
+      });
+      
       // CRITICAL FIX: Check if dimensions are available, use fallbacks if not
       let spritesheetWidth, spritesheetHeight;
       
@@ -633,79 +640,116 @@ class Renderer {
         spritesheetWidth = baseTexture.width;
         spritesheetHeight = baseTexture.height;
         console.log(`Using actual dimensions from loaded texture: ${spritesheetWidth}x${spritesheetHeight}`);
+        // Process the texture immediately
+        this.processClassSpritesheet(className, baseTexture, spritesheetWidth, spritesheetHeight);
       } else {
         // Fallback to default dimensions if baseTexture dimensions aren't available
         spritesheetWidth = 576;  // Default width (9 columns of 64px)
         spritesheetHeight = 256; // Default height (4 rows of 64px)
         console.log(`baseTexture dimensions unavailable (${baseTexture.width}x${baseTexture.height}), using fallback: ${spritesheetWidth}x${spritesheetHeight}`);
         
+        // Create temporary fallback textures
+        this.createFallbackTextures(className);
+        
         // CRITICAL FIX: Add an event listener to update textures when they're fully loaded
         baseTexture.once('loaded', () => {
           console.log(`Texture for ${className} now loaded with dimensions: ${baseTexture.width}x${baseTexture.height}`);
-          
-          // Only regenerate if dimensions actually changed
-          if (baseTexture.width !== spritesheetWidth || baseTexture.height !== spritesheetHeight) {
-            console.log(`Dimensions changed, regenerating textures for ${className}`);
-            this.regenerateClassTextures(className, baseTexture);
-          }
+          this.processClassSpritesheet(className, baseTexture, baseTexture.width, baseTexture.height);
         });
       }
+    } catch (error) {
+      console.error(`Error in loadClassTextureWithAnimation for ${className}:`, error);
+      this.createFallbackTextures(className);
+    }
+  }
+  
+  /**
+   * Create fallback textures for a class when loading fails
+   * @param {string} className - The class name
+   */
+  createFallbackTextures(className) {
+    console.warn(`Creating fallback textures for ${className}`);
+    
+    const color = className === 'warrior' ? 0xFF0000 : 
+                 className === 'mage' ? 0x0000FF : 0x00FF00;
+    
+    const fallbackTexture = this.createColoredRectTexture(color, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
+    
+    // Create a full set of animation frames with the fallback texture
+    const frames = {
+      default: fallbackTexture,
+      down: Array(9).fill().map(() => fallbackTexture.clone()),
+      left: Array(9).fill().map(() => fallbackTexture.clone()),
+      right: Array(9).fill().map(() => fallbackTexture.clone()),
+      up: Array(9).fill().map(() => fallbackTexture.clone())
+    };
+    
+    this.playerTextures[className] = frames;
+  }
+  
+  /**
+   * Process a class spritesheet to extract animation frames
+   * @param {string} className - The class name
+   * @param {PIXI.BaseTexture} baseTexture - The base texture
+   * @param {number} spritesheetWidth - The width of the spritesheet
+   * @param {number} spritesheetHeight - The height of the spritesheet
+   */
+  processClassSpritesheet(className, baseTexture, spritesheetWidth, spritesheetHeight) {
+    console.log(`Processing ${className} spritesheet: ${spritesheetWidth}x${spritesheetHeight}`);
+    
+    // Create frames object with default structure
+    const frames = {
+      down: [],
+      left: [],
+      right: [],
+      up: [],
+      default: null
+    };
+    
+    // If sprite is too small for a proper spritesheet (likely a placeholder),
+    // just use it as a single texture for all directions
+    if (spritesheetWidth < 32 || spritesheetHeight < 32) {
+      console.log(`${className} sprite is too small for animation, using as single texture`);
+      const texture = new PIXI.Texture(baseTexture);
       
-      console.log(`${className} sprite sheet dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
+      // Use the same texture for all directions
+      frames.default = texture;
+      frames.down = Array(9).fill().map(() => texture.clone());
+      frames.left = Array(9).fill().map(() => texture.clone());
+      frames.right = Array(9).fill().map(() => texture.clone());
+      frames.up = Array(9).fill().map(() => texture.clone());
+    } else {
+      // CRITICAL FIX: Always assume 4 rows and 9 columns, calculate frame dimensions
+      const numCols = 9;  // 9 frames per animation row
+      const numRows = 4;  // 4 directions (rows)
       
-      // Create frames object with default structure
-      const frames = {
-        down: [],
-        left: [],
-        right: [],
-        up: [],
-        default: null
-      };
+      // Calculate frame dimensions based on the sprite sheet size
+      const frameWidth = Math.floor(spritesheetWidth / numCols);
+      const frameHeight = Math.floor(spritesheetHeight / numRows);
       
-      // If sprite is too small for a proper spritesheet (likely a placeholder),
-      // just use it as a single texture for all directions
-      if (spritesheetWidth < 32 || spritesheetHeight < 32) {
-        console.log(`${className} sprite is too small for animation, using as single texture`);
-        const texture = new PIXI.Texture(baseTexture);
-        
-        // Use the same texture for all directions
-        frames.default = texture;
-        frames.down.push(texture);
-        frames.left.push(texture);
-        frames.right.push(texture);
-        frames.up.push(texture);
-      } else {
-        // CRITICAL FIX: Always assume 4 rows and 9 columns, calculate frame dimensions
-        const numCols = 9;  // 9 frames per animation row
-        const numRows = 4;  // 4 directions (rows)
-        
-        // Calculate frame dimensions based on the sprite sheet size
-        const frameWidth = Math.floor(spritesheetWidth / numCols);
-        const frameHeight = Math.floor(spritesheetHeight / numRows);
-        
-        console.log(`Calculated frame dimensions: ${frameWidth}x${frameHeight}`);
-        console.log(`Spritesheet has ${numRows} rows and ${numCols} columns of frames`);
-        
-        // CRITICAL FIX: Use the correct row mapping for the sprite sheet
-        // Row 0: Up animations
-        // Row 1: Left animations
-        // Row 2: Down animations
-        // Row 3: Right animations
-        
-        // Process for each row (direction)
-        for (let row = 0; row < numRows; row++) {
-          // Map rows to directions based on the sprite sheet layout
-          const direction = row === 0 ? 'up' : 
-                           row === 1 ? 'left' : 
-                           row === 2 ? 'down' : 'right';
-                           
-          console.log(`Processing ${direction} frames from row ${row}`);
-                           
-          // Get frames for this direction
-          for (let col = 0; col < numCols; col++) {
-            const x = col * frameWidth;
-            const y = row * frameHeight;
-            
+      console.log(`Calculated frame dimensions: ${frameWidth}x${frameHeight} for ${className}`);
+      
+      // CRITICAL FIX: Use the correct row mapping for the sprite sheet
+      // Row 0: Up animations
+      // Row 1: Left animations
+      // Row 2: Down animations
+      // Row 3: Right animations
+      
+      // Process for each row (direction)
+      for (let row = 0; row < numRows; row++) {
+        // Map rows to directions based on the sprite sheet layout
+        const direction = row === 0 ? 'up' : 
+                         row === 1 ? 'left' : 
+                         row === 2 ? 'down' : 'right';
+                         
+        console.log(`Processing ${direction} frames from row ${row}`);
+                         
+        // Get frames for this direction
+        for (let col = 0; col < numCols; col++) {
+          const x = col * frameWidth;
+          const y = row * frameHeight;
+          
+          try {
             const texture = new PIXI.Texture(
               baseTexture,
               new PIXI.Rectangle(x, y, frameWidth, frameHeight)
@@ -717,38 +761,20 @@ class Renderer {
             if (direction === 'down' && col === 0) {
               frames.default = texture;
             }
+          } catch (e) {
+            console.error(`Error creating texture for ${className} at position [${row},${col}]:`, e);
           }
         }
       }
-      
-      // If we couldn't extract any frames, create a fallback
-      if (!frames.default) {
-        // Create a simple colored rectangle as fallback
-        frames.default = this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
-        
-        // Copy default to all directions if they're empty
-        if (frames.down.length === 0) frames.down.push(frames.default);
-        if (frames.left.length === 0) frames.left.push(frames.default);
-        if (frames.right.length === 0) frames.right.push(frames.default);
-        if (frames.up.length === 0) frames.up.push(frames.default);
-        
-        console.warn(`No frames were extracted from ${path}, using fallback`);
-      }
-      
+    }
+    
+    // If we couldn't extract any frames, create a fallback
+    if (!frames.default || frames.down.length === 0) {
+      this.createFallbackTextures(className);
+    } else {
       // Store the animation frames
       this.playerTextures[className] = frames;
-      console.log(`Successfully loaded ${className} animation frames from ${path}`);
-    } catch (error) {
-      console.error(`Failed to load ${className} spritesheet from ${path}:`, error);
-      // Create a fallback colored rectangle
-      const fallbackTexture = this.createColoredRectTexture(0x00ff00, CONFIG.PLAYER_SIZE, CONFIG.PLAYER_SIZE);
-      this.playerTextures[className] = { 
-        default: fallbackTexture,
-        down: [fallbackTexture],
-        left: [fallbackTexture],
-        right: [fallbackTexture],
-        up: [fallbackTexture]
-      };
+      console.log(`Successfully processed ${className} animation frames: up=${frames.up.length}, down=${frames.down.length}, left=${frames.left.length}, right=${frames.right.length}`);
     }
   }
   
@@ -1889,6 +1915,29 @@ class Renderer {
       console.warn("Cannot render player: invalid position", player.id, player.position);
       return;
     }
+
+    // CRITICAL FIX: Add position interpolation for smoother movement
+    // Initialize lastPosition and lastUpdateTime if not exists
+    if (!player._lastPosition) {
+      player._lastPosition = { x: player.position.x, y: player.position.y };
+      player._lastUpdateTime = Date.now();
+    }
+
+    // Calculate interpolated position
+    const currentTime = Date.now();
+    const timeSinceLastUpdate = currentTime - player._lastUpdateTime;
+    const interpolationDuration = CONFIG.UPDATE_RATE; // Duration matches server update rate
+    const interpolationFactor = Math.min(timeSinceLastUpdate / interpolationDuration, 1);
+
+    // Calculate interpolated position
+    const interpolatedX = player._lastPosition.x + (player.position.x - player._lastPosition.x) * interpolationFactor;
+    const interpolatedY = player._lastPosition.y + (player.position.y - player._lastPosition.y) * interpolationFactor;
+
+    // Update last position when we reach the target
+    if (interpolationFactor === 1) {
+      player._lastPosition = { x: player.position.x, y: player.position.y };
+      player._lastUpdateTime = currentTime;
+    }
     
     // Ensure playerTextures exists
     if (!this.playerTextures) {
@@ -1993,15 +2042,127 @@ class Renderer {
         // Store the current direction
         this._playerDirectionCache.set(playerId, direction);
         
+        // Verify that the direction is valid and textures exist for it
+        if (!textures[direction] || textures[direction].length === 0) {
+          console.warn(`No textures found for direction ${direction}, falling back to 'down'`);
+          direction = 'down'; // Fall back to down if the chosen direction is invalid
+        }
+        
         // Get frames for this direction
-        const directionFrames = textures[direction] || textures.down;
+        const directionFrames = textures[direction];
         
-        // Calculate animation frame based on time or movement
-        const animationSpeed = 200; // ms per frame
-        const frameIndex = Math.floor(Date.now() / animationSpeed) % directionFrames.length;
+        // CRITICAL FIX: Ensure we have frames
+        if (!directionFrames || directionFrames.length === 0) {
+          console.error(`Critical error: No animation frames found for ${charClass} in direction ${direction}`);
+          
+          // Use default texture as fallback
+          if (textures.default) {
+            if (!sprite) {
+              sprite = new PIXI.Sprite(textures.default);
+              this._playerSpriteCache.set(playerId, sprite);
+              sprite.anchor.set(0.5, 0.5);
+            } else {
+              sprite.texture = textures.default;
+            }
+            
+            // CRITICAL FIX: Use class-specific sprite size if available
+            const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                           ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                           : CONFIG.PLAYER_SIZE;
+                           
+            // Set the size
+            sprite.width = classSize;
+            sprite.height = classSize;
+            
+            // Update position using interpolated coordinates
+            sprite.position.set(interpolatedX, interpolatedY);
+            return sprite;
+          }
+          return sprite || null;
+        }
         
-        // Get the current texture
-        const currentTexture = directionFrames[frameIndex];
+        // CRITICAL FIX: Debug log the available textures for this direction
+        if (isLocalPlayer) {
+            console.log(`[ANIMATION DEBUG] Direction: ${direction}, Frames available: ${directionFrames ? directionFrames.length : 0}`);
+            console.log(`[ANIMATION DEBUG] Available directions:`, Object.keys(textures));
+        }
+        
+        // CRITICAL FIX: Calculate animation frame based on movement
+        // Only animate if the player is actually moving
+        const isMoving = (player.velocity && (Math.abs(player.velocity.x) > 0.1 || Math.abs(player.velocity.y) > 0.1)) ||
+                        (player.movement && (Math.abs(player.movement.x) > 0.1 || Math.abs(player.movement.y) > 0.1));
+        
+        // Initialize animation state if not exists
+        if (!player._animationState) {
+            player._animationState = {
+                currentFrame: 0,
+                lastFrameTime: Date.now(),
+                frameInterval: 150, // Slightly slower animation for better visibility
+                direction: direction
+            };
+        }
+
+        // If direction changed, reset animation frame
+        if (player._animationState.direction !== direction) {
+            if (isLocalPlayer) {
+                console.log(`[ANIMATION DEBUG] Direction changed from ${player._animationState.direction} to ${direction}, resetting animation`);
+            }
+            player._animationState.currentFrame = 0;
+            player._animationState.direction = direction;
+        }
+        
+        // CRITICAL FIX: Ensure directionFrames is valid and has length
+        if (!directionFrames || !directionFrames.length) {
+            console.warn(`No frames found for direction ${direction} in class ${charClass}`);
+            // If no frames for this direction, try to use default
+            if (textures.default) {
+                const defaultTexture = textures.default;
+                if (sprite) {
+                    sprite.texture = defaultTexture;
+                } else {
+                    sprite = new PIXI.Sprite(defaultTexture);
+                    this._playerSpriteCache.set(playerId, sprite);
+                    sprite.anchor.set(0.5, 0.5);
+                }
+                
+                // Set size and position
+                const classSize = CONFIG.PLAYER_SPRITE_SIZE && CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                              ? CONFIG.PLAYER_SPRITE_SIZE[charClass] 
+                              : CONFIG.PLAYER_SIZE;
+                sprite.width = classSize;
+                sprite.height = classSize;
+                sprite.position.set(interpolatedX, interpolatedY);
+                return sprite;
+            }
+        }
+
+        let frameIndex;
+        
+        if (isMoving) {
+            // Animate when moving
+            const currentTime = Date.now();
+            if (currentTime - player._animationState.lastFrameTime >= player._animationState.frameInterval) {
+                // Safely increment frame within the available frames
+                player._animationState.currentFrame = (player._animationState.currentFrame + 1) % directionFrames.length;
+                player._animationState.lastFrameTime = currentTime;
+            }
+            frameIndex = player._animationState.currentFrame;
+            
+            if (isLocalPlayer && frameIndex % 3 === 0) { // Log only every 3rd frame to reduce spam
+                console.log(`[ANIMATION DEBUG] Animation frame: ${frameIndex}/${directionFrames.length-1} for direction ${direction}`);
+            }
+        } else {
+            // Use first frame when standing still
+            frameIndex = 0;
+        }
+        
+        // Get the current texture (with safety check)
+        const currentTexture = directionFrames[frameIndex] || directionFrames[0] || textures.default;
+        
+        if (!currentTexture) {
+            console.warn(`No texture found for ${charClass} in direction ${direction} at frame ${frameIndex}`);
+            return sprite; // Return existing sprite without changes if no texture found
+        }
         
         // Create sprite if it doesn't exist, or update texture if it does
         if (!sprite) {
@@ -2066,8 +2227,8 @@ class Renderer {
         }
       }
       
-      // Update position
-      sprite.position.set(player.position.x, player.position.y);
+      // Update position using interpolated coordinates
+      sprite.position.set(interpolatedX, interpolatedY);
       
       // Add the sprite to the entity layer
       this.entityLayer.addChild(sprite);
@@ -2104,8 +2265,8 @@ class Renderer {
       playerGraphics.lineStyle(2, 0xFFFFFF, 1.0);
       playerGraphics.beginFill(color, 0.8);
       playerGraphics.drawRect(
-        player.position.x - CONFIG.PLAYER_SIZE/2, 
-        player.position.y - CONFIG.PLAYER_SIZE/2, 
+        interpolatedX - CONFIG.PLAYER_SIZE/2, 
+        interpolatedY - CONFIG.PLAYER_SIZE/2, 
         CONFIG.PLAYER_SIZE, 
         CONFIG.PLAYER_SIZE
       );
@@ -2118,7 +2279,7 @@ class Renderer {
     // Get or create name text
     let nameText = this._playerTextCache.get(playerId);
     const displayText = isLocalPlayer ? 
-      `YOU (${Math.round(player.position.x)},${Math.round(player.position.y)})` : 
+      `YOU (${Math.round(interpolatedX)},${Math.round(interpolatedY)})` : 
       player.name;
       
     if (!nameText) {
@@ -2130,10 +2291,10 @@ class Renderer {
       nameText.text = displayText;
     }
     
-    // Update position
+    // Update position using interpolated coordinates
     nameText.position.set(
-      player.position.x - nameText.width / 2,
-      player.position.y - CONFIG.PLAYER_SIZE/2 - 20
+      interpolatedX - nameText.width / 2,
+      interpolatedY - CONFIG.PLAYER_SIZE/2 - 20
     );
     
     this.entityLayer.addChild(nameText);
