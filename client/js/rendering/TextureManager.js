@@ -234,7 +234,7 @@ class TextureManager {
       };
       
       // Extract frames for each direction
-      // IMPORTANT: The sprite sheet layout is:
+      // CORRECT row mapping:
       // Row 0: Up animations
       // Row 1: Left animations
       // Row 2: Down animations

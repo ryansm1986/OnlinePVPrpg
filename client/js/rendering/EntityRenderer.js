@@ -93,6 +93,11 @@ class EntityRenderer {
     const playerId = player.id || 'local-player';
     
     try {
+      // FORCE DEBUG: Always log direction for local player
+      if (isLocalPlayer) {
+        console.log(`[ANIMATION DEBUG] Player facing: ${player.facingDirection}, id: ${playerId}`);
+      }
+      
       // Get textures for this character class from the TextureManager
       const textures = this.renderer.textureManager.getPlayerTextures(charClass);
       
@@ -126,12 +131,20 @@ class EntityRenderer {
         this._debugLogged = true;
       }
       
-      // Get the player's direction
+      // Get the player's direction - FORCE a valid direction if necessary
       let direction = this.getPlayerDirection(player);
       
+      // CRITICAL FIX: If no direction is set or it's invalid, force it to 'down'
+      if (!direction || !['up', 'down', 'left', 'right'].includes(direction)) {
+        direction = 'down';
+        if (isLocalPlayer) {
+          console.warn(`[ANIMATION FIX] Invalid direction: "${direction}", forcing to "down"`);
+        }
+      }
+      
       // Debug the direction and animation selection
-      if (CONFIG.SPRITE_SHEET_DEBUG && isLocalPlayer) {
-        console.log(`Animation direction: ${direction}`);
+      if (isLocalPlayer) {
+        console.log(`[ANIMATION DEBUG] Using direction: ${direction}`);
       }
       
       // Ensure we have frames for this direction, fallback to 'down' if not
@@ -211,10 +224,16 @@ class EntityRenderer {
                   `animationState=${player.animationState}`);
     }
   
-    // Always prioritize the player's facing direction if available and valid
+    // CRITICAL FIX: Directly use the facingDirection property if it's valid
+    // This is the most important fix - we need to ensure facingDirection is used properly
     if (player.facingDirection && 
         ['up', 'down', 'left', 'right'].includes(player.facingDirection)) {
       return player.facingDirection;
+    }
+    
+    // If facingDirection is not valid but present, log it for debugging
+    if (player.facingDirection && player.isLocalPlayer) {
+      console.warn(`Invalid facingDirection: "${player.facingDirection}"`);
     }
     
     // Fallback options if facingDirection is not set or invalid

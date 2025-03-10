@@ -76,17 +76,34 @@ class Input {
     
     // Track direction keys with timestamp
     const now = Date.now();
+    
+    // Old direction for comparison
+    const oldDirection = this.lastDirection;
+    
     // Check for directional keys
     for (const direction in this.directionKeys) {
       if (this.directionKeys[direction].key.includes(key)) {
         this.directionKeys[direction].pressed = true;
         this.directionKeys[direction].lastPressed = now;
-        this.lastDirection = direction;
         
-        // Also update the player's facing direction immediately
-        if (this.game && this.game.player) {
-          this.game.player.facingDirection = direction;
+        // CRITICAL FIX: If the key corresponds directly to a direction, use it immediately
+        if (['up', 'down', 'left', 'right'].includes(direction)) {
+          this.lastDirection = direction;
         }
+      }
+    }
+    
+    // Log the direction change if it changed
+    if (oldDirection !== this.lastDirection && CONFIG.SPRITE_SHEET_DEBUG) {
+      console.log(`[KEY DOWN] Direction changed from "${oldDirection}" to "${this.lastDirection}"`);
+    }
+    
+    // CRITICAL FIX: Immediately update the player's facing direction
+    if (this.game && this.game.player && oldDirection !== this.lastDirection) {
+      this.game.player.facingDirection = this.lastDirection;
+      
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.log(`[KEY DOWN] Set player.facingDirection to "${this.lastDirection}"`);
       }
     }
     
@@ -275,6 +292,13 @@ class Input {
     this.movementDirection.x = dirX;
     this.movementDirection.y = dirY;
     
+    // CRITICAL FIX: Make sure the facing direction is one of the valid values
+    const validDirections = ['up', 'down', 'left', 'right'];
+    if (!validDirections.includes(this.lastDirection)) {
+      this.lastDirection = 'down'; // Default to down if invalid
+      console.warn(`[INPUT FIX] Invalid lastDirection: "${this.lastDirection}", forced to "down"`);
+    }
+    
     // Update direction based on combined key presses (handle diagonal movement)
     if (dirX !== 0 || dirY !== 0) {
       // Determine dominant direction (prioritize the most recent key press when in diagonals)
@@ -312,17 +336,22 @@ class Input {
         newDirection = this.directionKeys.down.lastPressed > this.directionKeys.right.lastPressed ? 'down' : 'right';
       }
       
-      this.lastDirection = newDirection;
+      // Validate the new direction
+      if (!validDirections.includes(newDirection)) {
+        console.warn(`[INPUT FIX] Invalid newDirection: "${newDirection}", keeping "${this.lastDirection}"`);
+      } else {
+        this.lastDirection = newDirection;
+      }
     }
     
     // If we have a game and player, always update facing direction
     if (this.game && this.game.player) {
-      this.game.player.facingDirection = this.lastDirection;
-      
-      // Debug info
       if (CONFIG.SPRITE_SHEET_DEBUG) {
-        console.log(`Setting player facingDirection to ${this.lastDirection}`);
+        console.log(`[INPUT DEBUG] Setting player facingDirection to "${this.lastDirection}"`);
       }
+      
+      // CRITICAL FIX: Always set a valid value
+      this.game.player.facingDirection = this.lastDirection;
     }
   }
   
@@ -335,21 +364,34 @@ class Input {
       return;
     }
     
+    // CRITICAL FIX: Ensure we always have a valid facing direction
+    if (!['up', 'down', 'left', 'right'].includes(this.lastDirection)) {
+      this.lastDirection = 'down'; // Default to down if invalid
+      
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.warn(`[PROCESS INPUT] Invalid lastDirection, forced to "down"`);
+      }
+    }
+    
     // Send movement input if direction changed or throttle time passed
     const now = Date.now();
     if (now - this.lastMovementTime >= this.movementThrottle) {
       this.lastMovementTime = now;
       
+      // CRITICAL FIX: Make sure player has the correct facing direction before sending to server
+      if (this.game.player) {
+        this.game.player.facingDirection = this.lastDirection;
+      }
+      
       // Send movement input to server with facing direction
       this.game.network.sendMovementInput(
         this.movementDirection.x, 
         this.movementDirection.y,
-        this.lastDirection
+        this.lastDirection  // Always send the current direction
       );
       
-      // Also update the facing direction based on our tracking system
-      if (this.game.player) {
-        this.game.player.facingDirection = this.lastDirection;
+      if (CONFIG.SPRITE_SHEET_DEBUG) {
+        console.log(`[NETWORK] Sent movement with facingDirection "${this.lastDirection}"`);
       }
     }
     
