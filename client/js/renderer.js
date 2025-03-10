@@ -384,49 +384,73 @@ class Renderer {
   loadTextures() {
     console.log("Loading textures...");
     
-    // Load textures by category
-    this.loadPlayerTextures();
-    this.loadMonsterTextures();
-    this.loadProjectileTextures();
-    this.loadExplosionTextures();
-    
-    // Copy the player textures to the main textures object
-    this.textures.player = { ...this.playerTextures };
-    
-    // Boss textures
-    this.textures.boss.dragon = this.createColoredRectTexture(0xFF0000, 96, 96);
-    this.textures.boss.lich = this.createColoredRectTexture(0x8800FF, 64, 64);
-    this.textures.boss.giant = this.createColoredRectTexture(0x888800, 112, 112);
-    this.textures.boss.demon = this.createColoredRectTexture(0xFF0088, 80, 80);
-    this.textures.boss.treant = this.createColoredRectTexture(0x008800, 88, 88);
-    this.textures.boss['ghost king'] = this.createColoredRectTexture(0xCCCCFF, 64, 64);
-    this.textures.boss['slime king'] = this.createColoredRectTexture(0x00FFFF, 96, 96);
-    
-    // Item textures
-    this.textures.item.weapon = this.createColoredRectTexture(0xFFFF00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.helmet = this.createColoredRectTexture(0xFFAA00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.chest = this.createColoredRectTexture(0xFF8800, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.legs = this.createColoredRectTexture(0xFF6600, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.boots = this.createColoredRectTexture(0xFF4400, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.gloves = this.createColoredRectTexture(0xFF2200, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.ring = this.createColoredRectTexture(0xFFDD00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.amulet = this.createColoredRectTexture(0xFFBB00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    this.textures.item.potion = this.createColoredRectTexture(0xFF00FF, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
-    
-    // Tile textures
-    this.textures.tile = {};
-    this.textures.tile.grass = this.createColoredRectTexture(0x228B22, 32, 32);
-    this.textures.tile.water = this.createColoredRectTexture(0x1E90FF, 32, 32);
-    this.textures.tile.stone = this.createColoredRectTexture(0x808080, 32, 32);
-    this.textures.tile.sand = this.createColoredRectTexture(0xF4A460, 32, 32);
-    
-    // Terrain textures
-    this.textures.terrain = {};
-    this.textures.terrain.tree = this.createTreeTexture();
-    this.textures.terrain.rock = this.createRockTexture();
-    this.textures.terrain.grass = this.createGrassTexture(); // Add grass texture
-    
-    console.log("Texture loading complete");
+    try {
+      // First load required textures
+      this.loadPlayerTextures();
+      this.loadMonsterTextures();
+      this.loadProjectileTextures();
+      this.loadExplosionTextures();
+      
+      // Copy the player textures to the main textures object
+      this.textures.player = { ...this.playerTextures };
+      
+      // Boss textures
+      this.textures.boss.dragon = this.createColoredRectTexture(0xFF0000, 96, 96);
+      this.textures.boss.lich = this.createColoredRectTexture(0x8800FF, 64, 64);
+      this.textures.boss.giant = this.createColoredRectTexture(0x888800, 112, 112);
+      this.textures.boss.demon = this.createColoredRectTexture(0xFF0088, 80, 80);
+      this.textures.boss.treant = this.createColoredRectTexture(0x008800, 88, 88);
+      this.textures.boss['ghost king'] = this.createColoredRectTexture(0xCCCCFF, 64, 64);
+      this.textures.boss['slime king'] = this.createColoredRectTexture(0x00FFFF, 96, 96);
+      
+      // Item textures
+      this.textures.item.weapon = this.createColoredRectTexture(0xFFFF00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.helmet = this.createColoredRectTexture(0xFFAA00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.chest = this.createColoredRectTexture(0xFF8800, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.legs = this.createColoredRectTexture(0xFF6600, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.boots = this.createColoredRectTexture(0xFF4400, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.gloves = this.createColoredRectTexture(0xFF2200, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.ring = this.createColoredRectTexture(0xFFDD00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.amulet = this.createColoredRectTexture(0xFFBB00, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      this.textures.item.potion = this.createColoredRectTexture(0xFF00FF, CONFIG.ITEM_SIZE, CONFIG.ITEM_SIZE);
+      
+      // Tile textures
+      this.textures.tile = {};
+      this.textures.tile.grass = this.createColoredRectTexture(0x228B22, 32, 32);
+      this.textures.tile.water = this.createColoredRectTexture(0x1E90FF, 32, 32);
+      this.textures.tile.stone = this.createColoredRectTexture(0x808080, 32, 32);
+      this.textures.tile.sand = this.createColoredRectTexture(0xF4A460, 32, 32);
+      
+      // Terrain textures
+      this.textures.terrain = {};
+      this.textures.terrain.tree = this.createTreeTexture();
+      this.textures.terrain.rock = this.createRockTexture();
+      this.textures.terrain.grass = this.createGrassTexture(); // Add grass texture
+      
+      console.log("Texture loading complete");
+    } catch (error) {
+      console.error("Error loading textures:", error);
+    }
+  }
+  
+  /**
+   * Preload an image to get its dimensions before creating textures
+   * @param {string} path - Path to the image
+   * @returns {Promise<{width: number, height: number}>} Image dimensions
+   */
+  preloadImage(path) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        console.log(`Preloaded image ${path} with dimensions: ${img.width}x${img.height}`);
+        resolve({ width: img.width, height: img.height });
+      };
+      img.onerror = (err) => {
+        console.error(`Failed to preload image ${path}:`, err);
+        reject(err);
+      };
+      img.src = path;
+    });
   }
   
   /**
@@ -437,14 +461,35 @@ class Renderer {
     
     // Load warrior texture
     const warriorPath = '/assets/classes/warrior/warriorsprite.png';
+    this.preloadImage(warriorPath)
+      .then(dimensions => {
+        console.log(`Warrior sprite dimensions: ${dimensions.width}x${dimensions.height}`);
+      })
+      .catch(err => {
+        console.warn('Failed to preload warrior sprite, will use fallback dimensions');
+      });
     this.loadClassTextureWithAnimation('warrior', warriorPath);
     
     // Load mage texture
     const magePath = '/assets/classes/mage/magesprite.png';
+    this.preloadImage(magePath)
+      .then(dimensions => {
+        console.log(`Mage sprite dimensions: ${dimensions.width}x${dimensions.height}`);
+      })
+      .catch(err => {
+        console.warn('Failed to preload mage sprite, will use fallback dimensions');
+      });
     this.loadClassTextureWithAnimation('mage', magePath);
     
     // Load ranger texture - use the path from client assets (correct path)
     const rangerPath = '/assets/classes/ranger/rangersprite.png';
+    this.preloadImage(rangerPath)
+      .then(dimensions => {
+        console.log(`Ranger sprite dimensions: ${dimensions.width}x${dimensions.height}`);
+      })
+      .catch(err => {
+        console.warn('Failed to preload ranger sprite, will use fallback dimensions');
+      });
     this.loadClassTextureWithAnimation('ranger', rangerPath);
   }
   
@@ -580,9 +625,31 @@ class Renderer {
       // Load the base texture
       const baseTexture = PIXI.BaseTexture.from(path);
       
-      // CRITICAL FIX: Use actual dimensions from the loaded texture
-      const spritesheetWidth = baseTexture.width;
-      const spritesheetHeight = baseTexture.height;
+      // CRITICAL FIX: Check if dimensions are available, use fallbacks if not
+      let spritesheetWidth, spritesheetHeight;
+      
+      // If baseTexture dimensions are valid (non-zero), use them
+      if (baseTexture.width > 0 && baseTexture.height > 0) {
+        spritesheetWidth = baseTexture.width;
+        spritesheetHeight = baseTexture.height;
+        console.log(`Using actual dimensions from loaded texture: ${spritesheetWidth}x${spritesheetHeight}`);
+      } else {
+        // Fallback to default dimensions if baseTexture dimensions aren't available
+        spritesheetWidth = 576;  // Default width (9 columns of 64px)
+        spritesheetHeight = 256; // Default height (4 rows of 64px)
+        console.log(`baseTexture dimensions unavailable (${baseTexture.width}x${baseTexture.height}), using fallback: ${spritesheetWidth}x${spritesheetHeight}`);
+        
+        // CRITICAL FIX: Add an event listener to update textures when they're fully loaded
+        baseTexture.once('loaded', () => {
+          console.log(`Texture for ${className} now loaded with dimensions: ${baseTexture.width}x${baseTexture.height}`);
+          
+          // Only regenerate if dimensions actually changed
+          if (baseTexture.width !== spritesheetWidth || baseTexture.height !== spritesheetHeight) {
+            console.log(`Dimensions changed, regenerating textures for ${className}`);
+            this.regenerateClassTextures(className, baseTexture);
+          }
+        });
+      }
       
       console.log(`${className} sprite sheet dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
       
@@ -2853,6 +2920,72 @@ class Renderer {
       console.log("Renderer resources cleaned up successfully");
     } catch (error) {
       console.error("Error cleaning up renderer resources:", error);
+    }
+  }
+
+  /**
+   * Regenerate class textures after a texture is fully loaded
+   * @param {string} className - The class name
+   * @param {PIXI.BaseTexture} baseTexture - The loaded base texture
+   */
+  regenerateClassTextures(className, baseTexture) {
+    try {
+      const spritesheetWidth = baseTexture.width;
+      const spritesheetHeight = baseTexture.height;
+      
+      // CRITICAL FIX: Always assume 4 rows and 9 columns, calculate frame dimensions
+      const numCols = 9;  // 9 frames per animation row
+      const numRows = 4;  // 4 directions (rows)
+      
+      // Calculate frame dimensions based on the sprite sheet size
+      const frameWidth = Math.floor(spritesheetWidth / numCols);
+      const frameHeight = Math.floor(spritesheetHeight / numRows);
+      
+      console.log(`Regenerating ${className} with dimensions: ${spritesheetWidth}x${spritesheetHeight}`);
+      console.log(`New frame dimensions: ${frameWidth}x${frameHeight}`);
+      
+      // Create frames object with default structure
+      const frames = {
+        down: [],
+        left: [],
+        right: [],
+        up: [],
+        default: null
+      };
+      
+      // Process for each row (direction)
+      for (let row = 0; row < numRows; row++) {
+        // Map rows to directions based on the sprite sheet layout
+        const direction = row === 0 ? 'up' : 
+                         row === 1 ? 'left' : 
+                         row === 2 ? 'down' : 'right';
+                         
+        console.log(`Regenerating ${direction} frames from row ${row}`);
+                         
+        // Get frames for this direction
+        for (let col = 0; col < numCols; col++) {
+          const x = col * frameWidth;
+          const y = row * frameHeight;
+          
+          const texture = new PIXI.Texture(
+            baseTexture,
+            new PIXI.Rectangle(x, y, frameWidth, frameHeight)
+          );
+          
+          frames[direction].push(texture);
+          
+          // Use the first down frame as default
+          if (direction === 'down' && col === 0) {
+            frames.default = texture;
+          }
+        }
+      }
+      
+      // Store the regenerated animation frames
+      this.playerTextures[className] = frames;
+      console.log(`Successfully regenerated ${className} animation frames`);
+    } catch (error) {
+      console.error(`Failed to regenerate textures for ${className}:`, error);
     }
   }
 } 
