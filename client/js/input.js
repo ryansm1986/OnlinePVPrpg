@@ -93,18 +93,13 @@ class Input {
       }
     }
     
-    // Log the direction change if it changed
-    if (oldDirection !== this.lastDirection && CONFIG.SPRITE_SHEET_DEBUG) {
-      console.log(`[KEY DOWN] Direction changed from "${oldDirection}" to "${this.lastDirection}"`);
-    }
+
     
     // CRITICAL FIX: Immediately update the player's facing direction
     if (this.game && this.game.player && oldDirection !== this.lastDirection) {
       this.game.player.facingDirection = this.lastDirection;
       
-      if (CONFIG.SPRITE_SHEET_DEBUG) {
-        console.log(`[KEY DOWN] Set player.facingDirection to "${this.lastDirection}"`);
-      }
+
     }
     
     // Handle special keys

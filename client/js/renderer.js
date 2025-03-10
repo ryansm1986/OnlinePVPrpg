@@ -3100,11 +3100,11 @@ class Renderer {
     }
 
     try {
-      // Load wolf sprite
-      this.textures.monster.wolf = PIXI.Texture.from('/assets/sprites/wolfsprite.png');
-      console.log("Successfully loaded wolf sprite");
+      // Load wolf animations instead of static sprite
+      this.loadWolfAnimations();
+      console.log("Successfully loaded wolf animations");
     } catch (error) {
-      console.error("Failed to load wolf sprite, using fallback:", error);
+      console.error("Failed to load wolf animations, using fallback:", error);
       this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     }
     
@@ -3123,12 +3123,138 @@ class Renderer {
     this.textures.monster.slime = this.createColoredRectTexture(0x00FFFF, 28, 28);
     this.textures.monster.troll = this.createColoredRectTexture(0x008800, 56, 56);
     this.textures.monster.snake = this.createColoredRectTexture(0x00FF88, 24, 24);
-    // Remove the simple skeleton texture since we're implementing a proper one
     this.textures.monster.ghost = this.createColoredRectTexture(0xFFFFFF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     this.textures.monster.cultist = this.createColoredRectTexture(0x880000, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     this.textures.monster.golem = this.createColoredRectTexture(0x777777, 64, 64);
     this.textures.monster.griffon = this.createColoredRectTexture(0xFFAA00, 48, 48);
     this.textures.monster.harpy = this.createColoredRectTexture(0xFF00FF, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+  }
+  
+  /**
+   * Load wolf animations from sprite sheets
+   */
+  loadWolfAnimations() {
+    console.log("Loading wolf animations...");
+    
+    // Initialize monster animation textures object if it doesn't exist
+    if (!this.textures.monsterAnimations) {
+      this.textures.monsterAnimations = {};
+    }
+    
+    // Initialize wolf animations object
+    this.textures.monsterAnimations.wolf = {
+      walk: {
+        up: [],
+        down: [],
+        left: [],
+        right: []
+      },
+      attack: {
+        up: [],
+        down: [],
+        left: [],
+        right: []
+      },
+      default: null
+    };
+    
+    // Load walk animations
+    const walkPath = '/assets/monsters/wolf_black_walk.png';
+    console.log("Loading wolf walk animation from:", walkPath);
+    const walkBaseTexture = PIXI.BaseTexture.from(walkPath);
+    
+    // Load attack animations
+    const attackPath = '/assets/monsters/wolf_black_attack.png';
+    console.log("Loading wolf attack animation from:", attackPath);
+    const attackBaseTexture = PIXI.BaseTexture.from(attackPath);
+    
+    // Process walk sprite sheet when loaded
+    walkBaseTexture.once('loaded', () => {
+      console.log("Wolf walk sprite sheet loaded successfully");
+      this.processWolfSpriteSheet(walkBaseTexture, 'walk');
+    });
+    
+    // Process attack sprite sheet when loaded
+    attackBaseTexture.once('loaded', () => {
+      console.log("Wolf attack sprite sheet loaded successfully");
+      this.processWolfSpriteSheet(attackBaseTexture, 'attack');
+    });
+    
+    // Add error handlers for both textures
+    walkBaseTexture.once('error', (error) => {
+      console.error("Failed to load wolf walk texture:", error);
+      // Set fallback texture in case of error
+      this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+    });
+    
+    attackBaseTexture.once('error', (error) => {
+      console.error("Failed to load wolf attack texture:", error);
+    });
+    
+    // Set a simple fallback in case loading fails
+    this.textures.monster.wolf = this.createColoredRectTexture(0x888888, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
+  }
+  
+  /**
+   * Process wolf sprite sheet to extract animation frames
+   * @param {PIXI.BaseTexture} baseTexture - The base texture to process
+   * @param {string} animationType - Either 'walk' or 'attack'
+   */
+  processWolfSpriteSheet(baseTexture, animationType) {
+    console.log(`Processing ${animationType} wolf sprite sheet...`);
+    
+    // Get dimensions
+    const sheetWidth = baseTexture.width;
+    const sheetHeight = baseTexture.height;
+    
+    console.log(`Wolf sprite sheet dimensions: ${sheetWidth}x${sheetHeight}`);
+    
+    // Based on the wolf sprite sheet structure - typically smaller than skeleton sheets
+    // For wolf_black_walk.png and wolf_black_attack.png: using 4 frames, 4 directions
+    const numCols = 4; // 4 frames per animation
+    const numRows = 4; // 4 rows for directions
+    
+    // Calculate frame dimensions
+    const frameWidth = Math.floor(sheetWidth / numCols);
+    const frameHeight = Math.floor(sheetHeight / numRows);
+    
+    console.log(`Wolf frame dimensions: ${frameWidth}x${frameHeight}, Grid: ${numRows}x${numCols}`);
+    
+    // Direction mapping (standard RPG spritesheet layout):
+    // Row 0: Down
+    // Row 1: Left
+    // Row 2: Right
+    // Row 3: Up
+    const rowDirections = ['down', 'left', 'right', 'up'];
+    
+    // Extract frames by direction
+    for (let row = 0; row < numRows; row++) {
+      const direction = rowDirections[row];
+      
+      for (let col = 0; col < numCols; col++) {
+        const x = col * frameWidth;
+        const y = row * frameHeight;
+        
+        const texture = new PIXI.Texture(
+          baseTexture,
+          new PIXI.Rectangle(x, y, frameWidth, frameHeight)
+        );
+        
+        // Add to appropriate animation collection
+        this.textures.monsterAnimations.wolf[animationType][direction].push(texture);
+      }
+      
+      console.log(`Extracted ${numCols} frames for ${direction} ${animationType} animation`);
+    }
+    
+    // Set default texture (first frame of down walk animation)
+    if (animationType === 'walk' && this.textures.monsterAnimations.wolf.walk.down.length > 0) {
+      this.textures.monster.wolf = this.textures.monsterAnimations.wolf.walk.down[0];
+      this.textures.monsterAnimations.wolf.default = this.textures.monsterAnimations.wolf.walk.down[0];
+      console.log("Set default wolf texture");
+    }
+    
+    console.log(`Finished processing ${animationType} wolf sprite sheet`);
   }
   
   /**
