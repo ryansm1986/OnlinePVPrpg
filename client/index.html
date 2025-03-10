@@ -6,39 +6,6 @@
   <title>Hardcore 2D Action RPG</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="favicon.ico" type="image/x-icon">
-  <style>
-    /* Add this style for the loading indicator */
-    #loading-indicator {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(0, 0, 0, 0.8);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      z-index: 9999;
-      color: white;
-      font-family: Arial, sans-serif;
-    }
-    
-    .spinner {
-      border: 6px solid rgba(255, 255, 255, 0.3);
-      border-radius: 50%;
-      border-top: 6px solid #fff;
-      width: 50px;
-      height: 50px;
-      animation: spin 1s linear infinite;
-      margin-bottom: 20px;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  </style>
 </head>
 <body>
   <div id="game-container">
@@ -196,22 +163,54 @@
   <!-- Scripts -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/input.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/network.js"></script>
-  <script src="js/entities/player.js"></script>
-  <script src="js/entities/monster.js"></script>
-  <script src="js/entities/item.js"></script>
-  <script src="js/world/world.js"></script>
-  <script src="js/main.js"></script>
-  
-  <!-- Loading indicator -->
-  <div id="loading-indicator">
-    <div class="spinner"></div>
-    <div>Loading game assets...</div>
-  </div>
+  <script>
+    // Add cache-busting timestamp to prevent browser caching
+    const cacheBuster = Date.now();
+    console.log(`[CACHE DEBUG] Adding cache-buster: ${cacheBuster}`);
+    
+    // Function to load script with cache busting
+    function loadScript(src) {
+      const script = document.createElement('script');
+      script.src = `${src}?v=${cacheBuster}`;
+      document.body.appendChild(script);
+      console.log(`[CACHE DEBUG] Loading: ${script.src}`);
+      return script;
+    }
+    
+    // Load scripts in sequence
+    const scripts = [
+      'js/config.js',
+      'js/game.js',
+      'js/renderer.js',
+      'js/input.js',
+      'js/ui.js',
+      'js/network.js',
+      'js/entities/player.js',
+      'js/entities/monster.js',
+      'js/entities/item.js',
+      'js/world/world.js',
+      'js/main.js'
+    ];
+    
+    // Load each script
+    let loadedCount = 0;
+    function loadNextScript(index) {
+      if (index >= scripts.length) return;
+      
+      const script = loadScript(scripts[index]);
+      script.onload = () => {
+        loadedCount++;
+        console.log(`[CACHE DEBUG] Loaded ${loadedCount}/${scripts.length}: ${scripts[index]}`);
+        loadNextScript(index + 1);
+      };
+      script.onerror = (error) => {
+        console.error(`[CACHE DEBUG] Error loading ${scripts[index]}:`, error);
+        loadNextScript(index + 1);
+      };
+    }
+    
+    // Start loading scripts
+    loadNextScript(0);
+  </script>
 </body>
 </html> 
