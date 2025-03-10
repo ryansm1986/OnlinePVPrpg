@@ -527,15 +527,8 @@ class Game {
       this.updateProjectiles(player);
     });
     
-    // Update monsters with special handling for skeletons
+    // Update monsters
     this.monsters.forEach(monster => {
-      // Log for debugging monster updates, especially skeletons
-      if (monster.type === 'skeleton') {
-        console.log(`Updating skeleton monster ${monster.id}:`, 
-                    `pos(${monster.position.x.toFixed(2)}, ${monster.position.y.toFixed(2)})`,
-                    `isDead: ${monster.isDead}`);
-      }
-      
       if (monster.update) {
         // Store previous position to restore if collision occurs
         const prevPosition = { 
@@ -546,20 +539,11 @@ class Game {
         // Update base monster properties
         monster.update(this.deltaTime);
         
-        // Skip AI and collision detection for dead monsters
-        if (monster.isDead) return;
-        
         // AI: Make monsters move toward nearby players
         this.updateMonsterAI(monster);
         
         // Collision detection to prevent overlapping
         this.checkMonsterCollisions(monster, prevPosition);
-        
-        // For skeletons, ensure they are not inadvertently marked as dead
-        if (monster.type === 'skeleton' && monster.isDead) {
-          console.warn(`Skeleton ${monster.id} was marked as dead - fixing`);
-          monster.isDead = false;
-        }
       }
     });
     

@@ -19,12 +19,7 @@ class Monster {
     this.width = data.width || CONFIG.MONSTER_SIZE;
     this.height = data.height || CONFIG.MONSTER_SIZE;
     this.isRanged = data.isRanged || false;
-    
-    // Explicitly set isDead to false for new monsters - important to prevent disappearing
-    this.isDead = false;
-    
-    // Log monster creation for debugging
-    console.log(`Monster created: ${this.id}, type: ${this.type}, position:`, this.position);
+    this.isDead = data.isDead || false;
     
     // Local properties
     this.entityType = 'monster';
@@ -44,15 +39,6 @@ class Monster {
    * @param {number} deltaTime - Time since last update in ms
    */
   update(deltaTime) {
-    // For skeletons, make extra sure isDead is not incorrectly set
-    if (this.type === 'skeleton') {
-      // Force skeleton to stay alive for testing
-      if (this.isDead) {
-        console.warn(`Preventing skeleton ${this.id} from being dead`);
-        this.isDead = false;
-      }
-    }
-    
     // Skip update if dead
     if (this.isDead) {
       return;
@@ -135,13 +121,7 @@ class Monster {
     this.width = data.width || this.width;
     this.height = data.height || this.height;
     this.isRanged = data.isRanged || this.isRanged;
-    
-    // Special handling for skeletons - never mark them as dead during testing
-    if (this.type === 'skeleton') {
-      this.isDead = false;
-    } else {
-      this.isDead = data.isDead || false;
-    }
+    this.isDead = data.isDead || false;
     
     // Update target position for interpolation
     if (data.position) {
