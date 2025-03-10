@@ -346,9 +346,7 @@ class Input {
     
     // If we have a game and player, always update facing direction
     if (this.game && this.game.player) {
-      if (CONFIG.SPRITE_SHEET_DEBUG) {
-        console.log(`[INPUT DEBUG] Setting player facingDirection to "${this.lastDirection}"`);
-      }
+
       
       // CRITICAL FIX: Always set a valid value
       this.game.player.facingDirection = this.lastDirection;
@@ -390,9 +388,7 @@ class Input {
         this.lastDirection  // Always send the current direction
       );
       
-      if (CONFIG.SPRITE_SHEET_DEBUG) {
-        console.log(`[NETWORK] Sent movement with facingDirection "${this.lastDirection}"`);
-      }
+
     }
     
     // Auto-attack if mouse is held down

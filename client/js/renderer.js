@@ -1805,9 +1805,20 @@ class Renderer {
       try {
         let sprite;
         
+        // Log monster information for debugging
+        console.log(`Rendering monster: ${monsterId}, type: ${monster.type}, isDead: ${monster.isDead}`);
+        
+        // Skip rendering dead monsters
+        if (monster.isDead) {
+          console.log(`Skipping dead monster: ${monsterId}`);
+          return;
+        }
+        
         // Check if this monster type has animations
         const hasAnimations = this.textures.monsterAnimations && 
                              this.textures.monsterAnimations[monster.type.toLowerCase()];
+        
+        console.log(`Monster ${monsterId} has animations: ${hasAnimations}`);
         
         // Special handling for animated monsters (like skeletons)
         if (hasAnimations) {
@@ -1818,7 +1829,12 @@ class Renderer {
           const direction = monster.facingDirection || 'down';
           const isAttacking = monster.isAttacking;
           const animationType = isAttacking ? 'attack' : 'walk';
+          
+          console.log(`Monster ${monsterId} animation: ${animationType}, direction: ${direction}`);
+          
           const frames = this.textures.monsterAnimations[monsterType][animationType][direction];
+          
+          console.log(`Monster ${monsterId} frames available: ${frames && frames.length}`);
           
           if (frames && frames.length > 0) {
             // Create animated sprite if it doesn't exist
@@ -3007,7 +3023,7 @@ class Renderer {
       // For animated sprite, adjust scale to match the game's style
       if (useAnimatedSlash) {
         // Adjust scale for the animated slash effect
-        slash.scale.set(1.2, 1.2); // Might need to adjust this value based on the sprite size
+        slash.scale.set(4, 4); // Might need to adjust this value based on the sprite size
       } else {
         // Set initial scale and alpha for the static sprite only
         slash.scale.set(0.5, 0.5);
@@ -3158,30 +3174,26 @@ class Renderer {
     console.log("Loading skeleton walk animation from:", walkPath);
     const walkBaseTexture = PIXI.BaseTexture.from(walkPath);
     
-    // Load attack animations
-    const attackPath = '/assets/monsters/skeleton_attack.png';
-    console.log("Loading skeleton attack animation from:", attackPath);
-    const attackBaseTexture = PIXI.BaseTexture.from(attackPath);
-    
     // Process walk sprite sheet when loaded
     walkBaseTexture.once('loaded', () => {
       console.log("Skeleton walk sprite sheet loaded successfully");
       this.processSkeletonSpriteSheet(walkBaseTexture, 'walk');
+      
+      // Copy walk animations to attack animations since attack sprite is missing
+      if (this.textures.monsterAnimations.skeleton.walk.down.length > 0) {
+        console.log("Using walk animations for attack animations");
+        this.textures.monsterAnimations.skeleton.attack.down = [...this.textures.monsterAnimations.skeleton.walk.down];
+        this.textures.monsterAnimations.skeleton.attack.up = [...this.textures.monsterAnimations.skeleton.walk.up];
+        this.textures.monsterAnimations.skeleton.attack.left = [...this.textures.monsterAnimations.skeleton.walk.left];
+        this.textures.monsterAnimations.skeleton.attack.right = [...this.textures.monsterAnimations.skeleton.walk.right];
+      }
     });
     
-    // Process attack sprite sheet when loaded
-    attackBaseTexture.once('loaded', () => {
-      console.log("Skeleton attack sprite sheet loaded successfully");
-      this.processSkeletonSpriteSheet(attackBaseTexture, 'attack');
-    });
-    
-    // Add error handlers for both textures
+    // Add error handlers
     walkBaseTexture.once('error', (error) => {
       console.error("Failed to load skeleton walk texture:", error);
-    });
-    
-    attackBaseTexture.once('error', (error) => {
-      console.error("Failed to load skeleton attack texture:", error);
+      // Set fallback texture in case of error
+      this.textures.monster.skeleton = this.createColoredRectTexture(0xCCCCCC, CONFIG.MONSTER_SIZE, CONFIG.MONSTER_SIZE);
     });
     
     // Set a simple fallback in case loading fails
@@ -3204,8 +3216,7 @@ class Renderer {
     
     // Determine number of frames based on animation type
     // For skeleton_walk.png: 9 frames, 4 directions
-    // For skeleton_attack.png: 6 frames, 4 directions
-    const numCols = animationType === 'walk' ? 9 : 6;
+    const numCols = 9; // Always use 9 frames since we only have walk animation
     const numRows = 4; // 4 rows for directions
     
     // Calculate frame dimensions
@@ -3242,7 +3253,7 @@ class Renderer {
     }
     
     // Set default texture (first frame of down walk animation)
-    if (animationType === 'walk' && this.textures.monsterAnimations.skeleton.walk.down.length > 0) {
+    if (this.textures.monsterAnimations.skeleton.walk.down.length > 0) {
       this.textures.monster.skeleton = this.textures.monsterAnimations.skeleton.walk.down[0];
       this.textures.monsterAnimations.skeleton.default = this.textures.monsterAnimations.skeleton.walk.down[0];
       console.log("Set default skeleton texture");

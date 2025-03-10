@@ -1443,8 +1443,11 @@ class Game {
       
       // Different collision handling based on feature type
       if (feature.type === 'tree') {
-        // Use a much larger collision radius for trees
-        const treeCollisionRadius = feature.radius * 1.5;
+        // Use a smaller collision radius for trees when the entity is a monster
+        const treeCollisionRadius = entity.type === 'skeleton' || entity.type === 'wolf' 
+          ? feature.radius * 1.0 // Smaller collision radius for monsters
+          : feature.radius * 1.5; // Normal radius for players
+        
         const collisionThresholdSquared = Math.pow(entityRadius + treeCollisionRadius, 2);
         
         // Check for tree collision with squared distance (more efficient)
@@ -1461,9 +1464,10 @@ class Game {
           continue;
         }
         
-        // More precise check
+        // More precise check with increased forgiveness for monsters
+        const forgiveness = (entity.type === 'skeleton' || entity.type === 'wolf') ? 6 : 2;
         const distance = Math.sqrt(distanceSquared);
-        if (distance < (entityRadius + feature.radius - 2)) { // Small forgiveness for rocks
+        if (distance < (entityRadius + feature.radius - forgiveness)) {
           hasCollision = true;
           break;
         }
@@ -1599,10 +1603,10 @@ class Game {
     const x = centerX + 100;
     const y = centerY + 100;
     
-    // Create the skeleton monster
+    // Create the skeleton monster - important to use lowercase 'skeleton'
     const skeleton = {
       id: skeletonId,
-      type: 'skeleton',
+      type: 'skeleton', // Must be lowercase to match the texture lookups
       position: { x, y },
       facingDirection: 'down',
       health: 50,
@@ -1610,8 +1614,11 @@ class Game {
       isAttacking: false,
       width: 48,
       height: 48,
-      state: 'idle'
+      state: 'idle',
+      isDead: false // Explicitly set to false to ensure visibility
     };
+    
+    console.log("Creating skeleton with data:", JSON.stringify(skeleton));
     
     // Create a Monster instance and add it to the monsters map
     const monsterInstance = new Monster(skeleton);
